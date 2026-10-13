@@ -25,8 +25,8 @@ const INT = /^(0|[1-9]\d*)$/;
 const int = (s) => { if (!INT.test(s)) throw new Bad("OPT_PARSE", "不是整數：" + s); return +s; };
 const FRAC_RE = "(\\d+)\\/(\\d+)";
 const frac = (s) => { const m = /^(−|-)?(0|[1-9]\d*)\/(0|[1-9]\d*)$/.exec(s); if (!m) throw new Bad("OPT_PARSE", "不是分數：" + s);
-  if (+m[3] === 0) throw new Bad("OPT_PARSE", "分母是 0：" + s); return { raw: [(m[1] ? -1 : 1) * +m[2], +m[3]] }; };
-const qfrac = (n, d) => { if (+d === 0) throw new Bad("BAD_DATA", "題目分母是 0"); return Q(+n, +d); };
+  if (+m[3] === 0) throw new Bad("OPT_PARSE", "分母是 0：" + s); return { raw: [(m[1] ? -1n : 1n) * BigInt(m[2]), BigInt(m[3])] }; };   // 選項也直接 BigInt（Codex 審 c1c2ee1：先轉 Number 精度流失）
+const qfrac = (n, d) => { if (+d === 0) throw new Bad("BAD_DATA", "題目分母是 0"); return Q(BigInt(n), BigInt(d)); };
 // 選項：數字＋固定單位（單位要和題目一致；"6abc"、"6 個" 混在「條」題裡都不收）
 const withUnit = (s, unit) => { const m = new RegExp("^(.+?)" + (unit ? " " + unit : "") + "$").exec(s); if (!m) throw new Bad("OPT_PARSE", "單位不對：" + s); return m[1]; };
 
@@ -189,7 +189,7 @@ const RULES = [
       const n = +m[1], d = +m[2], M = int(m[3]); if (!d || !M || M % d) throw new Bad("BAD_DATA", "分母不能擴成 " + M); return { kind: "expand", n, d, m: M, numer: n * M / d }; },
     judgeAll: (p) => ({ solution: String(p.numer), judge: (o) => int(o) === p.numer }) },
   { kind: "simplify", match: (q) => { const m = new RegExp("^把 " + FRAC_RE + " 約成最簡分數。$").exec(q); return m && { kind: "simplify", n: +m[1], d: +m[2], v: qfrac(m[1], m[2]) }; },
-    judgeAll: (p) => ({ solution: qstr(p.v), judge: (o) => { const f = frac(o).raw; return qcmp(Q(f[0], f[1]), p.v) === 0 && G(f[0], f[1]) === 1; } }) },
+    judgeAll: (p) => ({ solution: qstr(p.v), judge: (o) => { const f = frac(o).raw; return qcmp(Q(f[0], f[1]), p.v) === 0 && GB(f[0], f[1]) === 1n; } }) },
   { kind: "equiv", match: (q) => { const m = new RegExp("^下面哪一個分數和 " + FRAC_RE + " 一樣大？$").exec(q); return m && { kind: "equiv", n: +m[1], d: +m[2], v: qfrac(m[1], m[2]) }; },
     judge: (p, o) => { const f = frac(o).raw; return qcmp(Q(f[0], f[1]), p.v) === 0; } },
   { kind: "compare", match: (q) => { const m = new RegExp("^" + FRAC_RE + " ○ " + FRAC_RE + "，○ 裡要填 >、< 還是 =？$").exec(q); if (!m) return null;
@@ -207,7 +207,7 @@ const RULES = [
       judge: (o) => (o === "無限多條" ? Infinity : int(withUnit(o, "條"))) === p.axes }) },
   { kind: "addsub", match: parseAddSub, judgeAll: (p) => {
     const r = p.op === "+" ? qadd(p.X, p.Y) : qsub(p.X, p.Y), issues = r[0] < 0 && p.story ? ["NEGATIVE_RESULT"] : [];
-    return { issues, solution: qstr(r), judge: (o) => { const f = frac(withUnit(o, p.unit)).raw; return qcmp(Q(f[0], f[1]), r) === 0 && (!p.lowest || G(f[0], f[1]) === 1); } }; } }
+    return { issues, solution: qstr(r), judge: (o) => { const f = frac(withUnit(o, p.unit)).raw; return qcmp(Q(f[0], f[1]), r) === 0 && (!p.lowest || GB(f[0], f[1]) === 1n); } }; } }
 ];
 // 分數加減：算式題（要求最簡）＋六個敘事模板（每個模板寫明「誰減誰」的角色，不取絕對值）
 const F = FRAC_RE;

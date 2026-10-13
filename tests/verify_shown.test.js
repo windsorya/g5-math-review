@@ -327,3 +327,7 @@ test("不可能的內角：五邊形有一個角 400 度要拒絕題目", () => 
   const r2 = V.analyzeShown({ q: "三角形有 2 個角是 10 度、10 度，剩下那個角是幾度？", opts: ["160 度", "170 度"] });
   assert.deepEqual(r2.correctIndices, [0], "三角形 10、10、160 度是合法題目，要能通過：" + String(r2.issues));
 });
+test("精確分數選項：選項本身的大數也不能先轉成浮點數（1/100000001＋1/100000003）", () => {
+  const r = V.analyzeShown({ q: "1/100000001 ＋ 1/100000003 ＝？（寫成最簡分數）", opts: ["200000004/10000000400000003", "1/2"] });
+  assert.deepEqual(r.correctIndices, [0], String(r.issues));
+});
