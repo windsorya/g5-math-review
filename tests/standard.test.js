@@ -23,6 +23,10 @@ const RENDER = { escaped: true };   // 本站把解說文字 esc() 後才放進�
 // 由來：Codex 審 g5-help 2dfa59cb、g5-sci-review b15cf42f、g5-math-review 236d77d2（2026-10-13）抓到舊判準的假通過：
 // 空白理由、[{}] 影片、空 svg、<br> 被合併、連結沒驗目的地、只數網址次數、註解裡的 robots meta、只禁 /private/。
 // 每一個反例在檔尾各有一條「自檢」：把資料在記憶體裡改壞，斷言判準抓得到。
+// ⚠️ ②圖、④切換列、⑤robots meta 這三條在本檔只是「輔助」（2026-10-13 起）：用文字猜瀏覽器怎麼解析、怎麼畫，Codex 連 3 輪仍找到
+//   假通過與誤判（title=' href=…'、title=" content='noindex'"、<path d="M0 0"/>、<rect width="0.0">、合法 <line x2="0"> 判沒圖）。
+//   主閘是真瀏覽器 DOM：自然站 tests/e2e_v3.py、數學站 tests/e2e.py 的 flow_standard_dom（a.href、meta.content、getBBox＋getComputedStyle），
+//   每條都在頁面上把 DOM 改成這些反例自檢。本檔②④⑤只做不開瀏覽器的秒級粗篩，不再補正規表達式；兩者不一致時以 e2e 為準。
 const SITES = {
   sci: { url: "https://windsorya.github.io/g5-sci-review/", name: "五上自然複習" },
   math: { url: "https://windsorya.github.io/g5-math-review/", name: "五上數學複習" },
@@ -54,7 +58,7 @@ function attrOf(tag, name) {
   const m = new RegExp("[\\s<]" + name + "\\s*=\\s*(\"([^\"]*)\"|'([^']*)')", "i").exec(" " + String(tag));
   return m ? (m[2] !== undefined ? m[2] : m[3]) : null;
 }
-// ②圖：至少一個 <svg>，帶 role="img"、aria-label（去空白後 ≥4 字），而且裡面真的有「有幾何資料」的繪圖元素（HTML 註解不算）。
+// ②圖【輔助；主閘＝e2e 的 flow_standard_dom】：至少一個 <svg>，帶 role="img"、aria-label（去空白後 ≥4 字），而且裡面真的有「有幾何資料」的繪圖元素（HTML 註解不算）。
 // Codex 審 4b559c4：<path/> 沒有 d 也被當成有圖 ⇒ 每種元素要有它畫得出東西的必要屬性。
 const DRAW_NEED = { path: ["d"], rect: ["width", "height"], circle: ["r"], ellipse: ["rx", "ry"], line: ["x2"], polyline: ["points"], polygon: ["points"], image: ["href"], use: ["href"] };
 function drawsSomething(inner) {
@@ -88,7 +92,7 @@ function sentences(t) {
     .map((x) => x.replace(/<[^>]*>/g, "").replace(/&[a-z]+;|&#\d+;/gi, "").trim()).filter(Boolean);
 }
 const tooLong = (t) => sentences(t).filter((s) => s.length > MAX_SENTENCE);
-// ④切換列：只看 id="siteNav" 元素裡面（HTML 註解不算）：恰好兩個 <a>、href 恰為另外兩站，本站項目帶 aria-current="page" 且字是本站名。
+// ④切換列【輔助；主閘＝e2e 的 flow_standard_dom】：只看 id="siteNav" 元素裡面（HTML 註解不算）：恰好兩個 <a>、href 恰為另外兩站，本站項目帶 aria-current="page" 且字是本站名。
 function navProblems(html, self) {
   const h = stripComments(html), open = /<([a-z][\w-]*)\b[^>]*\bid="siteNav"[^>]*>/i.exec(h);
   if (!open) return ['找不到 id="siteNav"'];
@@ -103,7 +107,7 @@ function navProblems(html, self) {
   if (cur.length !== 1 || cur[0][2].replace(/<[^>]*>/g, "").trim() !== SITES[self].name) bad.push("siteNav 要有一個 aria-current=\"page\" 的「" + SITES[self].name + "」");
   return bad;
 }
-// ⑤收錄：去掉 HTML 註解後 <head> 裡有 <meta name="robots" content 含 noindex>；robots.txt 在 User-agent: * 區段有一行恰為「Disallow: /」。
+// ⑤收錄（meta 部分【輔助；主閘＝e2e 的 flow_standard_dom】；robots.txt 是純文字檔，本檔判準即主閘）：去掉 HTML 註解後 <head> 裡有 <meta name="robots" content 含 noindex>；robots.txt 在 User-agent: * 區段有一行恰為「Disallow: /」。
 function robotsMetaOk(html) {
   const head = stripComments(html).split(/<\/head>/i)[0];
   return (head.match(/<meta\b[^>]*>/gi) || []).some((t) => {
