@@ -66,10 +66,12 @@ STD_SITES = {"sci": ("https://windsorya.github.io/g5-sci-review/", "五上自然
 # ④切換列：#siteNav 恰一個；裡面每個 <a> 的 a.href（瀏覽器解析後）恰為另外兩站、看得見；恰一個 aria-current="page" 且字是本站名。
 STD_NAV_JS = """() => { const navs = document.querySelectorAll('#siteNav'), nav = navs[0];
   if (navs.length !== 1) return {navs: navs.length};
-  const seen = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility === 'visible'; };
+  // 看得見＝有大小、visibility 是 visible，而且一路往上每一層都沒 display:none、透明度相乘 >0（Codex 審 f0422ce／b1ae271：上層 opacity:0 假通過）
+  const seen = (e) => { const r = e.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0) || getComputedStyle(e).visibility !== 'visible') return false;
+    let op = 1; for (let n = e; n; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none') return false; op *= parseFloat(cs.opacity); } return op > 0; };
   const as = [...nav.querySelectorAll('a')];
   return {navs: 1, hrefs: as.map((a) => a.href), hidden: as.filter((a) => !seen(a)).map((a) => a.href || a.outerHTML.slice(0, 80)),
-          current: [...nav.querySelectorAll('[aria-current="page"]')].map((e) => (e.textContent || '').trim())}; }"""
+          current: [...nav.querySelectorAll('[aria-current="page"]')].filter(seen).map((e) => (e.textContent || '').trim())}; }   // 本站標記也要看得見"""
 # ⑤收錄：<head> 裡的 meta[name=robots]，用真屬性 meta.content，逗號／空白切開後有 noindex。
 STD_ROBOTS_JS = """() => [...document.querySelectorAll('meta[name="robots" i]')].map((m) => ({content: m.content, inHead: !!document.head && document.head.contains(m)}))"""
 # ②圖：sel 選到的每個容器（一步／一種說法）至少一張 svg[role=img]；每張都要有 aria-label（去空白後 ≥4 字）、本身看得見，
@@ -82,7 +84,7 @@ STD_FIG_JS = """(sel) => {
   const num = (x) => { const v = parseFloat(x); return Number.isFinite(v) ? v : 0; };
   const noPaint = (c) => !c || c === 'none' || c === 'transparent' || /^rgba\\(.*,\\s*0(\\.0*)?\\)$/.test(c);
   const shown = (el, svg) => { let op = 1;
-    for (let n = el; n; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none') return false; op *= num(cs.opacity); if (n === svg) break; }
+    for (let n = el; n; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none') return false; op *= num(cs.opacity); }   // 一路查到最外層：圖的容器被設成透明也算看不見
     return getComputedStyle(el).visibility === 'visible' && op > 0; };
   function drawn(el, svg, vb, box) {
     const tag = el.tagName.toLowerCase(), cs = getComputedStyle(el);
@@ -176,7 +178,8 @@ STD_MUTATE_JS = """([mode, sel, html]) => {
     if (html === null) svg.removeAttribute('aria-label'); else svg.innerHTML = html; return; }
   if (mode === 'figback') { const [svg, inner, lab] = window.__stdSaved.fig; svg.innerHTML = inner; svg.setAttribute('aria-label', lab); return; }
   if (mode === 'nav') { const nav = document.getElementById('siteNav'); window.__stdSaved.nav = nav.innerHTML; (new Function('nav', html))(nav); return; }
-  if (mode === 'navback') { document.getElementById('siteNav').innerHTML = window.__stdSaved.nav; document.querySelectorAll('[data-std-extra]').forEach((e) => e.remove()); return; }
+  if (mode === 'navback') { const nv = document.getElementById('siteNav'); nv.style.opacity = ''; if (nv.parentElement) nv.parentElement.style.opacity = '';
+    nv.innerHTML = window.__stdSaved.nav; document.querySelectorAll('[data-std-extra]').forEach((e) => e.remove()); return; }
   if (mode === 'robots') { const ms = [...document.querySelectorAll('meta[name="robots" i]')]; window.__stdSaved.robots = ms.map((m) => m.cloneNode());
     ms.forEach((m) => m.remove());
     if (html.startsWith('<!--')) window.__stdSaved.cmt = document.head.appendChild(document.createComment(html.slice(4, -3)));
@@ -200,6 +203,11 @@ def std_selftest(page, label, self_key, fig_sel):
         if got != want:
             wrong.append(f"{name}：應判{'有' if want else '沒有'}圖，判成{'有' if got else '沒有'}")
     check(f"{label} 標準DOM自檢② {len(STD_FIG_CASES) + 1} 個圖的反例／正例都判對（含 <path d=\"M0 0\"/>、<rect width=\"0.0\">、<circle r=\"0.0\"/>、合法 <line x2=\"0\">）", not wrong, wrong)
+    # 圖的容器（例如 .sfig）設成透明：圖本身完好也要判看不見（Codex 審 f0422ce／b1ae271）
+    page.evaluate("(sel) => { const s = document.querySelector(sel + ' svg[role=img]'); s.parentElement.dataset.stdOp = s.parentElement.style.opacity; s.parentElement.style.opacity = '0'; }", cont_sel)
+    outer_hidden = bool(std_fig_problems(page.evaluate(STD_FIG_JS, cont_sel)[:1]))
+    page.evaluate("(sel) => { const s = document.querySelector(sel + ' svg[role=img]'); s.parentElement.style.opacity = s.parentElement.dataset.stdOp || ''; }", cont_sel)
+    check(f"{label} 標準DOM自檢② 圖的外層透明要判成看不見", outer_hidden)
     check(f"{label} 標準DOM自檢② 改完復原後真圖仍判有圖", not std_fig_problems(page.evaluate(STD_FIG_JS, cont_sel)[:1]))
     # ④（JS 片段：參數 nav＝#siteNav 元素）
     other = [u for k, (u, _) in STD_SITES.items() if k != self_key]
@@ -209,6 +217,9 @@ def std_selftest(page, label, self_key, fig_sel):
         ("一個連結改指本站", f"nav.querySelector('a').setAttribute('href', {json.dumps(STD_SITES[self_key][0])});"),
         ("移除兩個 <a>、網址留在別處", "nav.querySelectorAll('a').forEach((a) => a.remove()); const s = document.createElement('script'); s.type = 'text/plain'; s.dataset.stdExtra = 1; s.textContent = " + json.dumps(" ".join(other)) + "; document.body.appendChild(s);"),
         ("連結藏起來（display:none）", "nav.querySelectorAll('a').forEach((a) => { a.style.display = 'none'; });"),
+        ("連結透明（opacity:0）", "nav.querySelectorAll('a').forEach((a) => { a.style.opacity = '0'; });"),
+        ("整個切換列的外層透明", "nav.parentElement.style.opacity = '0';"),
+        ("本站標記藏起來（display:none）", "nav.querySelector('[aria-current]').style.display = 'none';"),
         ("拿掉 aria-current", "nav.querySelectorAll('[aria-current]').forEach((e) => e.removeAttribute('aria-current'));"),
         ("aria-current 字不是本站名", "nav.querySelector('[aria-current]').textContent = '別站';"),
         ("多一個 #siteNav", "const d = nav.cloneNode(true); d.dataset.stdExtra = 1; document.body.appendChild(d);"),

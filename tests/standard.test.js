@@ -70,6 +70,8 @@ function drawsSomething(inner) {
   while ((m = re.exec(inner))) {
     const el = m[1].toLowerCase();
     if (el === "text") { if (m[4].replace(/<[^>]*>/g, "").trim()) return true; continue; }
+    // 線段看兩端點有沒有分開（Codex 審 f0422ce：x2="0" 的合法線段被誤判沒圖）；其他元素照必要屬性
+    if (el === "line") { const g = (k) => parseFloat(attrOf("<line" + m[2], k) ?? "0") || 0; if (g("x1") !== g("x2") || g("y1") !== g("y2")) return true; continue; }
     if (DRAW_NEED[el].every((a) => { const v = attrOf("<" + el + m[2], a) ?? attrOf("<" + el + m[2], "xlink:" + a); return v !== null && String(v).trim() !== "" && String(v).trim() !== "0"; })) return true;
   }
   return false;
@@ -226,4 +228,9 @@ test("自檢⑤c：<meta name=\"robots\" data-content=\"noindex\">（沒有 cont
 });
 test("自檢③c：本站文字會被轉義，25 字＋<br>＋25 字是一句 50 多字，要抓到", () => {
   assert.ok(tooLong("字".repeat(25) + "<br>" + "字".repeat(25)).length);
+});
+
+test("自檢②c：合法線段 x2=\"0\"（兩端點分開）不能誤判成沒有圖；兩端點重合的線段才算沒畫", () => {
+  assert.equal(figOk('<svg role="img" aria-label="太陽路徑"><line x1="50" y1="50" x2="0" y2="50" stroke="black" stroke-width="4"/></svg>'), true);
+  assert.equal(figOk('<svg role="img" aria-label="太陽路徑"><line x1="5" y1="5" x2="5" y2="5" stroke="black"/></svg>'), false);
 });
