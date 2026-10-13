@@ -110,7 +110,8 @@ def flow_concepts(browser, label, device=None):
 
 # 播放器畫面出現這些字＝不能播（YouTube 嵌入錯誤頁；英文介面與中文介面都列）。比對時不分大小寫。
 PLAYER_ERROR_MARKS = ("video unavailable", "this video is private", "private video", "error 153", "錯誤 153",
-                      "無法播放", "影片無法觀看", "私人影片", "an error occurred", "發生錯誤")
+                      "無法播放", "影片無法觀看", "私人影片", "an error occurred", "發生錯誤",
+                      "sign in to confirm", "登入以確認")
 # 讀播放器 iframe 裡的真實狀態。2026-10-13 正式網址實測：正常播放時 body 文字常是空的（2a 播到 116 秒、6b 播到 92 秒，innerText 都是 ""），
 # 所以「沒有文字」不能當失敗；能不能播看 <video> 元素：存在、沒有 YouTube 錯誤畫面、沒暫停或時間已前進。
 PLAYER_STATE_JS = """b => { const v = b.querySelector('video'), e = b.querySelector('.ytp-error');
