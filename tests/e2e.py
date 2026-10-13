@@ -71,7 +71,7 @@ STD_NAV_JS = """() => { const navs = document.querySelectorAll('#siteNav'), nav 
     let op = 1; for (let n = e; n; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none') return false; op *= parseFloat(cs.opacity); } return op > 0; };
   const as = [...nav.querySelectorAll('a')];
   return {navs: 1, hrefs: as.map((a) => a.href), hidden: as.filter((a) => !seen(a)).map((a) => a.href || a.outerHTML.slice(0, 80)),
-          current: [...nav.querySelectorAll('[aria-current="page"]')].filter(seen).map((e) => (e.textContent || '').trim())}; }   // 本站標記也要看得見"""
+          current: [...nav.querySelectorAll('[aria-current="page"]')].map((e) => (seen(e) ? '' : '（看不見）') + (e.textContent || '').trim())}; }   // 每個標記都算數量；看不見的直接不等於本站名（Codex 審 4d8b1e0／f26e093：先濾掉再數，藏起來的重複標記會假通過）"""
 # ⑤收錄：<head> 裡的 meta[name=robots]，用真屬性 meta.content，逗號／空白切開後有 noindex。
 STD_ROBOTS_JS = """() => [...document.querySelectorAll('meta[name="robots" i]')].map((m) => ({content: m.content, inHead: !!document.head && document.head.contains(m)}))"""
 # ②圖：sel 選到的每個容器（一步／一種說法）至少一張 svg[role=img]；每張都要有 aria-label（去空白後 ≥4 字）、本身看得見，
@@ -220,6 +220,7 @@ def std_selftest(page, label, self_key, fig_sel):
         ("連結透明（opacity:0）", "nav.querySelectorAll('a').forEach((a) => { a.style.opacity = '0'; });"),
         ("整個切換列的外層透明", "nav.parentElement.style.opacity = '0';"),
         ("本站標記藏起來（display:none）", "nav.querySelector('[aria-current]').style.display = 'none';"),
+        ("多一個藏起來的本站標記", "const x = document.createElement('span'); x.setAttribute('aria-current', 'page'); x.hidden = true; x.textContent = '重複'; nav.appendChild(x);"),
         ("拿掉 aria-current", "nav.querySelectorAll('[aria-current]').forEach((e) => e.removeAttribute('aria-current'));"),
         ("aria-current 字不是本站名", "nav.querySelector('[aria-current]').textContent = '別站';"),
         ("多一個 #siteNav", "const d = nav.cloneNode(true); d.dataset.stdExtra = 1; document.body.appendChild(d);"),
