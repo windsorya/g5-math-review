@@ -43,6 +43,22 @@ const sum = (xs) => xs.reduce((s, x) => add(s, x), 0);
 const GB = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) [a, b] = [b, a % b]; return a; };
 const gcd = (a, b) => num(GB(big(a), big(b)));
 const lcm = (a, b) => mulDiv(a, b, gcd(a, b));
+// 精確整數平方根（BigInt 牛頓法）：⌊√n⌋，n 為非負安全整數
+function isqrt(n) {
+  const N = big(n); if (N < 0n) throw new Bad("BAD_DATA", "負數開根號");
+  if (N < 2n) return num(N);
+  let x = N, y = (x + 1n) / 2n;
+  while (y < x) { x = y; y = (x + N / x) / 2n; }
+  return num(x);
+}
+// 因數個數（Codex 審 c7d3d01：舊版迴圈以 mul(i,i) 為停止條件，n 接近最大安全整數時最後一步 i² 超出範圍而誤判 BAD_DATA，且 BigInt 逐一試除要 10 秒）：
+// 上限用精確的 ⌊√n⌋，迴圈裡只做安全整數的 % 與 /（i ≤ √n、n 為安全整數，不會溢位、結果精確）
+function countDivisors(n) {
+  const v = num(big(n)); if (v < 1) throw new Bad("BAD_DATA");
+  const r = isqrt(v); let c = 0;
+  for (let i = 1; i <= r; i += 1) if (v % i === 0) c += v / i === i ? 1 : 2;   // 成對的因數 i 與 n÷i
+  return c;
+}
 const Q = (n, d) => { n = big(n); d = big(d); if (d === 0n) throw new Bad("BAD_DATA"); if (d < 0n) { n = -n; d = -d; } const g = GB(n, d) || 1n; return [n / g, d / g]; };
 const qadd = (x, y) => Q(x[0] * y[1] + y[0] * x[1], x[1] * y[1]);
 const qsub = (x, y) => Q(x[0] * y[1] - y[0] * x[1], x[1] * y[1]);
@@ -171,8 +187,7 @@ const RULES = [
   { kind: "isfactor", match: (q) => { const m = /^下面哪一個(不?是) (\d+) 的因數？$/.exec(q); return m && { kind: "isfactor", n: int(m[2]), neg: m[1] === "不是" }; },
     judge: (p, o) => { const x = int(o); if (!p.n || !x) throw new Bad("BAD_DATA"); return (mod(p.n, x) === 0) !== p.neg; } },
   { kind: "nfactors", match: (q) => { const m = /^(\d+) 有幾個因數？$/.exec(q); return m && { kind: "nfactors", n: int(m[1]) }; },
-    judgeAll: (p) => { if (!p.n) throw new Bad("BAD_DATA"); let c = 0;
-      for (let i = 1; cmp(mul(i, i), p.n) <= 0; i = add(i, 1)) if (mod(p.n, i) === 0) c = add(c, cmp(mul(i, i), p.n) === 0 ? 1 : 2);   // 成對的因數 i 與 n÷i
+    judgeAll: (p) => { if (!p.n) throw new Bad("BAD_DATA"); const c = countDivisors(p.n);
       return { solution: String(c), judge: (o) => int(o) === c }; } },
   { kind: "gcd", match: (q) => {
     let m = /^(\d+) 和 (\d+) 的最大公因數是多少？$/.exec(q);

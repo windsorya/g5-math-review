@@ -472,3 +472,16 @@ test("大數 集中入口：數值入口以外的程式不得私自轉型或做�
   body.forEach((l) => banned.forEach(([re, name]) => { if (re.test(l)) hits.push(name + "：" + l.trim().slice(0, 80)); }));
   assert.deepEqual(hits, []);
 });
+
+// Codex 審 c7d3d01：①因數題迴圈用 mul(i,i) 當停止條件，n 接近最大安全整數時最後一步 i² 超出範圍而誤判 BAD_DATA；
+// ②最小公倍數沒有大數案例，改回 a*b/gcd（Number）不會被抓到。
+test("大數 邊界：最大安全整數 9007199254740991 有 8 個因數（不得誤判 BAD_DATA）", () => {
+  const r = V.analyzeShown({ q: "9007199254740991 有幾個因數？", opts: ["8", "6"] });
+  assert.deepEqual(r.issues, []);
+  assert.deepEqual(r.correctIndices, [0]);
+});
+test("大數 最小公倍數：13000000195 和 17000000255 ⇒ 221000003315（Number 乘除會算成 …314.99997）", () => {
+  const r = V.analyzeShown({ q: "13000000195 和 17000000255 的最小公倍數是多少？", opts: ["221000003315", "221000003314"] });
+  assert.equal(r.solution, "221000003315");
+  assert.deepEqual(r.correctIndices, [0]);
+});
