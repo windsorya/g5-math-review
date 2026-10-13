@@ -10,11 +10,13 @@ const FACT_KEY = require("./fact_key.js");
 /* ---------- 精確整數／有理數（另寫，不用題庫的 gcd/lcm） ---------- */
 const G = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) [a, b] = [b, a % b]; return a; };
 const Lc = (a, b) => a / G(a, b) * b;
-const Q = (n, d) => { if (d === 0) throw new Bad("BAD_DATA"); if (d < 0) { n = -n; d = -d; } const g = G(n, d) || 1; return [n / g, d / g]; };
+// 有理數一律用 BigInt（Codex 審 0765694：99999999/100000000 與 100000000/100000001 交叉相乘超過浮點精度，被判成相等）
+const GB = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) [a, b] = [b, a % b]; return a; };
+const Q = (n, d) => { n = BigInt(n); d = BigInt(d); if (d === 0n) throw new Bad("BAD_DATA"); if (d < 0n) { n = -n; d = -d; } const g = GB(n, d) || 1n; return [n / g, d / g]; };
 const qadd = (x, y) => Q(x[0] * y[1] + y[0] * x[1], x[1] * y[1]);
 const qsub = (x, y) => Q(x[0] * y[1] - y[0] * x[1], x[1] * y[1]);
-const qcmp = (x, y) => Math.sign(x[0] * y[1] - y[0] * x[1]);   // 分母恆正
-const qstr = (x) => x[1] === 1 ? String(x[0]) : x[0] + "/" + x[1];
+const qcmp = (x, y) => { const v = x[0] * y[1] - y[0] * x[1]; return v > 0n ? 1 : v < 0n ? -1 : 0; };   // 分母恆正
+const qstr = (x) => x[1] === 1n ? String(x[0]) : x[0] + "/" + x[1];
 const ncmp = (x, y) => Math.sign(x - y);
 class Bad extends Error { constructor(code, msg) { super(msg || code); this.code = code; } }
 
@@ -179,6 +181,8 @@ const RULES = [
     if (g.length !== int(m[2]) || g.length !== n - 1 || g.some((x) => !x)) throw new Bad("BAD_DATA", "角的個數不對");
     const rest = (n - 2) * 180 - g.reduce((a, b) => a + b, 0);
     if (rest <= 0) throw new Bad("BAD_DATA", "已知角加起來超過內角和");
+    // 小五範圍是凸多邊形：每個角都要大於 0、小於 180 度（Codex 審 0765694：400 度的角仍放行）
+    if (g.concat([rest]).some((x) => x <= 0 || x >= 180)) throw new Bad("BAD_DATA", "有角不在 0～180 度之間");
     return { kind: "missing", n, g, rest }; },
     judgeAll: (p) => ({ solution: String(p.rest), judge: (o) => int(withUnit(o, "度")) === p.rest }) },
   { kind: "expand", match: (q) => { const m = new RegExp("^把 " + FRAC_RE + " 擴分成分母是 (\\d+) 的分數，分子是多少？$").exec(q); if (!m) return null;
@@ -289,7 +293,8 @@ function makeVerifier(hooks) {
 }
 
 /* ---------- chk 只當核對資料：題文解析出的欄位與 chk 對得上才算一致 ---------- */
-const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+const bigToNum = (k, v) => (typeof v === "bigint" ? Number(v) : v);   // 有理數改 BigInt 後，比對與輸出 JSON 時轉回數字
+const same = (x, y) => JSON.stringify(x, bigToNum) === JSON.stringify(y, bigToNum);
 const sortedNums = (arr) => arr.slice().sort((a, b) => a - b);
 function chkAgrees(c, an) {
   const k = c.chk, p = an.parsed;
@@ -335,6 +340,6 @@ if (require.main === module) {
   process.stdin.on("data", (d) => { buf += d; });
   process.stdin.on("end", () => {
     const items = JSON.parse(buf);
-    process.stdout.write(JSON.stringify(items.map((it) => api.analyzeShown({ q: it.q, opts: it.opts }))));
+    process.stdout.write(JSON.stringify(items.map((it) => api.analyzeShown({ q: it.q, opts: it.opts })), bigToNum));
   });
 }

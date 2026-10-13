@@ -315,3 +315,15 @@ test("未知句型一律拒絕（不猜、不預設通過）", () => {
   const b = V.analyzeShown({ q: "12 和 18 的最大公因數是多少", opts: ["6", "3"] });   // 少了問號也不猜
   assert.ok(b.issues.includes("UNKNOWN_PATTERN"));
 });
+
+// Codex 審 0765694／1f68b46：①大數交叉相乘超過浮點精度被判成相等 ②不可能的內角（400 度）仍放行
+test("精確分數比較：99999999/100000000 ○ 100000000/100000001 要判成 <", () => {
+  const r = V.analyzeShown({ q: "99999999/100000000 ○ 100000000/100000001，○ 裡要填 >、< 還是 =？", opts: ["<", ">", "="] });
+  assert.deepEqual(r.correctIndices, [0], String(r.issues));
+});
+test("不可能的內角：五邊形有一個角 400 度要拒絕題目", () => {
+  const r = V.analyzeShown({ q: "五邊形有 4 個角是 400 度、40 度、40 度、40 度，剩下那個角是幾度？", opts: ["20 度", "40 度"] });
+  assert.ok((r.issues || []).length || !(r.correctIndices || []).length, String(r.correctIndices));
+  const r2 = V.analyzeShown({ q: "三角形有 2 個角是 10 度、10 度，剩下那個角是幾度？", opts: ["160 度", "170 度"] });
+  assert.deepEqual(r2.correctIndices, [0], "三角形 10、10、160 度是合法題目，要能通過：" + String(r2.issues));
+});
