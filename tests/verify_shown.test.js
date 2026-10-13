@@ -331,3 +331,9 @@ test("精確分數選項：選項本身的大數也不能先轉成浮點數（1/
   const r = V.analyzeShown({ q: "1/100000001 ＋ 1/100000003 ＝？（寫成最簡分數）", opts: ["200000004/10000000400000003", "1/2"] });
   assert.deepEqual(r.correctIndices, [0], String(r.issues));
 });
+test("題文數字超過安全整數上限要拒絕（不可偷偷失真後再和 chk 比對）", () => {
+  const card = { id: "big", q: "9007199254740993/10 ○ 1/2，○ 裡要填 >、< 還是 =？", opts: [">", "<", "="], a: 0,
+    chk: { k: "compare", a: 9007199254740992, b: 10, c: 1, d: 2 } };
+  const r = V.verifyCard(card);
+  assert.equal(r.ok, false, "大數題要被拒絕");
+});

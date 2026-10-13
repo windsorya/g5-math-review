@@ -22,10 +22,12 @@ class Bad extends Error { constructor(code, msg) { super(msg || code); this.code
 
 // 嚴格數值：整串必須是數字，不截前綴、不刪字
 const INT = /^(0|[1-9]\d*)$/;
-const int = (s) => { if (!INT.test(s)) throw new Bad("OPT_PARSE", "不是整數：" + s); return +s; };
+const int = (s) => { if (!INT.test(s)) throw new Bad("OPT_PARSE", "不是整數：" + s); return safe(s); };
+// 題文與選項裡的整數一律要在安全範圍內：超過就拒絕，不讓它轉成 Number 時偷偷失真（Codex 審 6f1db21）
+function safe(s) { const v = +s; if (!Number.isSafeInteger(v)) throw new Bad("BAD_DATA", "數字太大：" + s); return v; }
 const FRAC_RE = "(\\d+)\\/(\\d+)";
 const frac = (s) => { const m = /^(−|-)?(0|[1-9]\d*)\/(0|[1-9]\d*)$/.exec(s); if (!m) throw new Bad("OPT_PARSE", "不是分數：" + s);
-  if (+m[3] === 0) throw new Bad("OPT_PARSE", "分母是 0：" + s); return { raw: [(m[1] ? -1n : 1n) * BigInt(m[2]), BigInt(m[3])] }; };   // 選項也直接 BigInt（Codex 審 c1c2ee1：先轉 Number 精度流失）
+  if (m[3] === "0") throw new Bad("OPT_PARSE", "分母是 0：" + s); return { raw: [(m[1] ? -1n : 1n) * BigInt(m[2]), BigInt(m[3])] }; };   // 選項也直接 BigInt（Codex 審 c1c2ee1：先轉 Number 精度流失）
 const qfrac = (n, d) => { if (+d === 0) throw new Bad("BAD_DATA", "題目分母是 0"); return Q(BigInt(n), BigInt(d)); };
 // 選項：數字＋固定單位（單位要和題目一致；"6abc"、"6 個" 混在「條」題裡都不收）
 const withUnit = (s, unit) => { const m = new RegExp("^(.+?)" + (unit ? " " + unit : "") + "$").exec(s); if (!m) throw new Bad("OPT_PARSE", "單位不對：" + s); return m[1]; };
@@ -186,14 +188,14 @@ const RULES = [
     return { kind: "missing", n, g, rest }; },
     judgeAll: (p) => ({ solution: String(p.rest), judge: (o) => int(withUnit(o, "度")) === p.rest }) },
   { kind: "expand", match: (q) => { const m = new RegExp("^把 " + FRAC_RE + " 擴分成分母是 (\\d+) 的分數，分子是多少？$").exec(q); if (!m) return null;
-      const n = +m[1], d = +m[2], M = int(m[3]); if (!d || !M || M % d) throw new Bad("BAD_DATA", "分母不能擴成 " + M); return { kind: "expand", n, d, m: M, numer: n * M / d }; },
+      const n = safe(m[1]), d = safe(m[2]), M = int(m[3]); if (!d || !M || M % d) throw new Bad("BAD_DATA", "分母不能擴成 " + M); return { kind: "expand", n, d, m: M, numer: n * M / d }; },
     judgeAll: (p) => ({ solution: String(p.numer), judge: (o) => int(o) === p.numer }) },
-  { kind: "simplify", match: (q) => { const m = new RegExp("^把 " + FRAC_RE + " 約成最簡分數。$").exec(q); return m && { kind: "simplify", n: +m[1], d: +m[2], v: qfrac(m[1], m[2]) }; },
+  { kind: "simplify", match: (q) => { const m = new RegExp("^把 " + FRAC_RE + " 約成最簡分數。$").exec(q); return m && { kind: "simplify", n: safe(m[1]), d: safe(m[2]), v: qfrac(m[1], m[2]) }; },
     judgeAll: (p) => ({ solution: qstr(p.v), judge: (o) => { const f = frac(o).raw; return qcmp(Q(f[0], f[1]), p.v) === 0 && GB(f[0], f[1]) === 1n; } }) },
-  { kind: "equiv", match: (q) => { const m = new RegExp("^下面哪一個分數和 " + FRAC_RE + " 一樣大？$").exec(q); return m && { kind: "equiv", n: +m[1], d: +m[2], v: qfrac(m[1], m[2]) }; },
+  { kind: "equiv", match: (q) => { const m = new RegExp("^下面哪一個分數和 " + FRAC_RE + " 一樣大？$").exec(q); return m && { kind: "equiv", n: safe(m[1]), d: safe(m[2]), v: qfrac(m[1], m[2]) }; },
     judge: (p, o) => { const f = frac(o).raw; return qcmp(Q(f[0], f[1]), p.v) === 0; } },
   { kind: "compare", match: (q) => { const m = new RegExp("^" + FRAC_RE + " ○ " + FRAC_RE + "，○ 裡要填 >、< 還是 =？$").exec(q); if (!m) return null;
-      return { kind: "compare", a: +m[1], b: +m[2], c: +m[3], d: +m[4], x: qfrac(m[1], m[2]), y: qfrac(m[3], m[4]) }; },
+      return { kind: "compare", a: safe(m[1]), b: safe(m[2]), c: safe(m[3]), d: safe(m[4]), x: qfrac(m[1], m[2]), y: qfrac(m[3], m[4]) }; },
     judgeAll: (p) => { const s = [">", "=", "<"][1 - qcmp(p.x, p.y)]; return { solution: s, judge: (o) => { if (![">", "<", "="].includes(o)) throw new Bad("OPT_PARSE"); return o === s; } }; } },
   { kind: "maxfrac", match: (q) => { const m = /^下面哪一個分數最(大|小)？$/.exec(q); return m && { kind: "maxfrac", ask: m[1] === "大" ? "max" : "min" }; },
     judgeOpts(p, opts, X) {
@@ -293,7 +295,7 @@ function makeVerifier(hooks) {
 }
 
 /* ---------- chk 只當核對資料：題文解析出的欄位與 chk 對得上才算一致 ---------- */
-const bigToNum = (k, v) => (typeof v === "bigint" ? Number(v) : v);   // 有理數改 BigInt 後，比對與輸出 JSON 時轉回數字
+const bigToNum = (k, v) => (typeof v === "bigint" ? (Number.isSafeInteger(Number(v)) ? Number(v) : String(v)) : v);   // 大數輸出成字串，不失真   // 有理數改 BigInt 後，比對與輸出 JSON 時轉回數字
 const same = (x, y) => JSON.stringify(x, bigToNum) === JSON.stringify(y, bigToNum);
 const sortedNums = (arr) => arr.slice().sort((a, b) => a - b);
 function chkAgrees(c, an) {
