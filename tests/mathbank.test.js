@@ -100,3 +100,12 @@ test("每個會出題的觀念至少一段影片（欄位齊全、起訖秒數�
     assert.ok(Number.isInteger(v.start) && v.start >= 0 && (v.end === null || (Number.isInteger(v.end) && v.end > v.start)), k + " 起訖秒數不對：" + JSON.stringify(v));
   }));
 });
+
+// Codex 2026-10-13 審查：g2up 兩段都增加 4 公分卻只認一個（正解被判錯）⇒ 「最多／最高」類題目的答案必須唯一
+test("最多／最高類題目：答案唯一（沒有並列）", () => {
+  B.CARDS.filter((c) => c.chk.k === "argmax" || c.chk.k === "maxrise").forEach((c) => {
+    const v = c.chk.v, vals = c.chk.k === "argmax" ? v : v.slice(1).map((x, i) => x - v[i]);
+    const m = Math.max(...vals);
+    assert.equal(vals.filter((x) => x === m).length, 1, c.id + " 有並列：" + vals.join(","));
+  });
+});
