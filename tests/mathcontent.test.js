@@ -195,7 +195,8 @@ test("⑥-b 自檢：只改題面數字、chk 不動，要抓到", () => {
 // ⑦ 名稱不能唯一決定圖形時，問「是不是／有幾條」要先排除特例（Codex 審 0995e02：先猜題 5a 只說長方形，正方形的對角線就是對稱軸）
 function shapeAmbiguity(items) {
   return items.filter((x) => /長方形/.test(x.q) && /對稱軸|對角線|正多邊形/.test(x.q) && !/長和寬不一樣長|不是正方形/.test(x.q)).map((x) => x.id + "：" + x.q)
-    .concat(items.filter((x) => /平行四邊形\s*0\s*條/.test(x.q) && !/不是長方形|一般的平行四邊形/.test(x.q)).map((x) => x.id + "（平行四邊形可能是長方形）：" + x.q));
+    // 平行四邊形 0 條：要同時排除長方形（2 或 4 條）和菱形（2 或 4 條）；只排除長方形不夠，菱形不是長方形卻有 2 條
+    .concat(items.filter((x) => /平行四邊形）?\s*0\s*條/.test(x.q) && !(/不是長方形/.test(x.q) && /(也)?不是菱形/.test(x.q))).map((x) => x.id + "（平行四邊形可能是長方形或菱形）：" + x.q));
 }
 const VID = require("../src/mathvideos.js");
 // 影片說明也是孩子看得到的字（Codex 審 a053220：5a 影片說明寫「長方形2條」，正方形也是長方形、有 4 條）
@@ -207,4 +208,8 @@ test("⑦題卡與先猜題問長方形的對稱軸／對角線時要排除正�
 test("⑦-b 自檢：「長方形的對角線是不是對稱軸？」要抓到", () => {
   assert.equal(shapeAmbiguity([{ id: "x", q: "先猜猜看：長方形的對角線是不是對稱軸？" }]).length, 1);
   assert.equal(shapeAmbiguity([{ id: "v", q: "對稱軸：正方形4條。長方形2條、平行四邊形0條。" }]).length, 2);
+  // 菱形不是長方形卻有 2 條：只排除長方形的舊說法要抓到；同時排除長方形與菱形的新說法不誤判
+  assert.equal(shapeAmbiguity([{ id: "舊", q: "不是長方形的平行四邊形0條。" }]).length, 1);
+  assert.equal(shapeAmbiguity([{ id: "新", q: "一般的平行四邊形（不是長方形、也不是菱形）0條。" }]).length, 0);
+  assert.equal(shapeAmbiguity([{ id: "只寫一般", q: "一般的平行四邊形0條。" }]).length, 1);
 });

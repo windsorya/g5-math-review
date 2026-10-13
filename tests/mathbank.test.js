@@ -43,12 +43,16 @@ function axesCount(P) {
     return P.every((p) => { const x = p[0] - c[0], y = p[1] - c[1], d = x * ux + y * uy, r = [c[0] + 2 * d * ux - x, c[1] + 2 * d * uy - y];
       return P.some((q) => dist(q, r) < 1e-7); }); }).length;
 }
-// 觀念題的答案鑰（人工審過，寫在測試裡，和題庫分開；題庫打亂或改錯正解位置就會紅）。不在表裡的觀念題 ⇒ 不通過
-const KEY = {
-  "g-use": "一天中每 2 小時的氣溫變化", "g-wave": "中間省略一段刻度，讓圖不會太高", "g-steep": "那一段變化最大",
-  "f-one": "所有的整數", "p-def": "每條邊都一樣長，每個角也都一樣大", "p-circle": "不是，圓沒有直的邊",
-  "s-para": "不是，找不到能對折重疊的線", "s-fold": "完全重疊", "s-edge": "一樣長", "s-point": "互相垂直，而且被對稱軸平分", "s-circle": "無限多條"
-};
+// 觀念題的答案鑰：完整審定紀錄（完整題文＋全部選項＋各選項真假）在 tests/fact_key.js，和新驗算器 tests/verify_shown.js 共用。
+// 用題文找紀錄（id 不當答案依據）；題文或選項集合和紀錄不同 ⇒ 沒審過 ⇒ 不通過
+const FACT = require("./fact_key.js");
+function factKeyOk(c, R) {
+  const rec = FACT.RECORDS.find((r) => r.q === c.q);
+  if (!rec) return false;
+  const want = rec.opts.map((o) => o.text).sort(), got = c.opts.slice().sort();
+  if (want.length !== got.length || want.some((t, i) => t !== got[i])) return false;
+  return rec.opts.find((o) => o.text === R).ok === true;
+}
 
 function expected(c) {
   const k = c.chk, R = c.opts[c.a];
@@ -84,7 +88,7 @@ function expected(c) {
     case "fact": {
       const m = /^是非題：「(.+)是正多邊形。」$/.exec(c.q);
       if (m) { const P = shapeOf(m[1]); return !!P && R === (isRegular(P) ? "對" : "錯"); }
-      return Object.prototype.hasOwnProperty.call(KEY, c.id) && KEY[c.id] === R;
+      return factKeyOk(c, R);
     }
     default: return false;
   }

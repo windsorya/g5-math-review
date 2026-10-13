@@ -175,6 +175,79 @@ def flow_review(browser):
     ctx.close()
 
 
+# A17 最終產物（docs/design-verify-shown-codex-20261013.md）：只讀畫面上的題文與「依畫面順序」的按鈕文字，
+# 用 tests/verify_shown.js（和 node 主閘同一個驗算器）獨立求解；每張卡的每個選項各在一個全新的瀏覽器狀態裡實際點一次，
+# 斷言「UI 判對」⇔「獨立求得的唯一正解」。不讀題庫的 a；題庫只拿 q／opts 核對「畫面＝受驗資料」。
+A17_OPEN_MS = 15000
+
+
+def solve_shown(items):
+    import subprocess
+    r = subprocess.run(["node", str(ROOT / "tests" / "verify_shown.js")], input=json.dumps(items, ensure_ascii=False),
+                       capture_output=True, text=True, timeout=120)
+    if r.returncode:
+        raise RuntimeError("驗算器失敗：" + r.stderr[:300])
+    return json.loads(r.stdout)
+
+
+A17_SHOWN_JS = """() => { const q = document.querySelector('#main .q'); if (!q) return null;
+  const bs = [...document.querySelectorAll('#main .opt')].map((b, dom) => { const r = b.getBoundingClientRect();
+    return {text: b.innerText, dom, y: Math.round(r.top), x: Math.round(r.left), seen: r.width > 0 && r.height > 0}; });
+  bs.sort((a, b) => a.y - b.y || a.x - b.x);
+  return {q: q.innerText, opts: bs.map((b) => b.text), dom: bs.map((b) => b.dom), hidden: bs.filter((b) => !b.seen).length}; }"""
+
+
+def flow_a17(browser):
+    ctx, pg, errors = open_page(browser)
+    cids = pg.evaluate("Object.keys(G5MathBank.CONCEPTS)")
+    bank = pg.evaluate("G5MathBank.CARDS.map(function(c){return [c.q, c.opts];})")   # 只取 q／opts 核對畫面，不取 a
+    ctx.close()
+    seen, problems = {}, []
+    for cid in cids:
+        for k in range(4):   # 第 k 輪：每張卡點畫面上第 k 個按鈕（卡片選項最多 4 個）；每輪都是全新的瀏覽器狀態
+            ctx, pg, errs = open_page(browser)
+            errors += errs
+            pg.locator(f'#concepts .ccard[data-cid="{cid}"]').click(); pg.wait_for_selector("#cAll", timeout=A17_OPEN_MS)
+            pg.locator("#cAll").click(); pg.wait_for_selector("#main .q", timeout=A17_OPEN_MS)
+            for _ in range(80):
+                sh = pg.evaluate(A17_SHOWN_JS)
+                if not sh or not sh["opts"]:
+                    break
+                key = sh["q"] + "␞" + "␟".join(sh["opts"])
+                rec = seen.setdefault(key, {"q": sh["q"], "opts": sh["opts"], "cid": cid, "judged": {}})
+                if sh["hidden"]:
+                    problems.append(f"{cid}「{sh['q'][:20]}」有看不見的選項按鈕")
+                pick = k if k < len(sh["opts"]) else 0
+                pg.locator("#main .opt").nth(sh["dom"][pick]).click()
+                box = pg.locator("#ansBox").inner_text()
+                if k < len(sh["opts"]):
+                    if "還沒存到" in box:
+                        problems.append(f"{cid}「{sh['q'][:20]}」第 {k} 個選項：作答沒存到（{box[:40]}）")
+                    elif k in rec["judged"]:
+                        problems.append(f"{cid}「{sh['q'][:20]}」同一輪出現兩次")
+                    else:
+                        rec["judged"][k] = "答對了" in box and "正確答案是" not in box
+                if pg.locator("#next").count() == 0:
+                    pg.locator('#errq button[data-k=""]').click()
+                pg.locator("#next").click()
+            ctx.close()
+    items = list(seen.values())
+    bank_keys = {q + "␞" + "␟".join(o) for q, o in bank}
+    check(f"A17 畫面題卡＝受驗資料：{len(items)} 張（題庫 {len(bank)} 張）、題文與依畫面順序的按鈕文字都和題庫一致",
+          len(items) == len(bank) and all((it["q"] + "␞" + "␟".join(it["opts"])) in bank_keys for it in items),
+          [it["q"][:30] for it in items if (it["q"] + "␞" + "␟".join(it["opts"])) not in bank_keys][:5] or len(items))
+    unclicked = [it["q"][:30] for it in items if sorted(it["judged"]) != list(range(len(it["opts"])))]
+    check("A17 每張卡的每個選項都在全新狀態下實際點過一次", not unclicked and not problems, (unclicked + problems)[:8])
+    sol = solve_shown([{"q": it["q"], "opts": it["opts"]} for it in items])
+    unsolved = [f"{it['q'][:30]}：{s['issues']}" for it, s in zip(items, sol) if s["issues"] or len(s["correctIndices"]) != 1]
+    check(f"A17 獨立驗算器從畫面文字解出 {len(items)} 張卡，每張恰一個正解、沒有問題原因", not unsolved, unsolved[:8])
+    clicks = sum(len(it["judged"]) for it in items)
+    mismatch = [f"{it['q'][:30]}｜{it['opts'][i]}：UI {'判對' if it['judged'][i] else '判錯'}，驗算 {'正解' if i in s['correctIndices'] else '錯誤'}"
+                for it, s in zip(items, sol) for i in sorted(it["judged"]) if it["judged"][i] != (i in s["correctIndices"])]
+    check(f"A17 實際點擊 {clicks} 次：只有獨立求得的唯一正解被 UI 判對", clicks and not mismatch, mismatch[:8])
+    check("A17 作答過程沒有 JS 錯誤", not errors, errors[:3])
+
+
 def main():
     with sync_playwright() as p:
         cr = p.chromium.launch()
@@ -184,6 +257,7 @@ def main():
         flow_main(cr, "手機390", {"viewport": {"width": 390, "height": 844}, "is_mobile": True, "has_touch": True, "device_scale_factor": 2})
         flow_concepts(cr, "手機390", {"viewport": {"width": 390, "height": 844}, "is_mobile": True, "has_touch": True})
         flow_review(cr)
+        flow_a17(cr)
         cr.close()
         wk = p.webkit.launch()
         ipad = p.devices["iPad (gen 7)"]
