@@ -811,3 +811,47 @@ test("R5/R8 合法 v1 照常搬（D2-d）：只寫一次、migrateReason=null", 
   assert.deepEqual(st.get().state.cards.s1, { seen: 8, goodDays: [], blockedDay: null, due: "2026-10-21", needsRecheck: true });
   assert.equal(mem.raw["g5math.none"], v1);
 });
+
+// ---- Codex 審 e6c7ed6 的核心 FAIL 項（報告 ~/scripts/state/codex_commit_reviews/g5-math-review-e6c7ed67-*）----
+test("M1 兩個分頁：A 存了作答，B 隨後 tick 不得用舊的記憶體狀態蓋掉", () => {
+  const b = bank(["s1", "s2"]); const mem = memStorage();
+  const A = C.createStore({ storage: mem, bank: b, clock: () => NOON(D) }); A.load();
+  const B = C.createStore({ storage: mem, bank: b, clock: () => NOON(D) }); B.load();
+  assert.ok(A.dispatch(op("answer", { cardId: "s1", ok: true })).ok);
+  assert.ok(B.dispatch({ type: "tick" }).ok);
+  assert.deepEqual(Object.keys(JSON.parse(mem.raw["g5math.v2"]).cards), ["s1"], "A 的作答被 B 蓋掉了");
+  assert.ok(B.dispatch(op("answer", { cardId: "s2", ok: true })).ok);
+  assert.deepEqual(Object.keys(JSON.parse(mem.raw["g5math.v2"]).cards).sort(), ["s1", "s2"]);
+  assert.deepEqual(Object.keys(B.get().state.cards).sort(), ["s1", "s2"], "B 畫面用的狀態也要換成最新的");
+});
+
+test("M2 預設每日計畫：每天做完排定的題目、全答對，考前一天以前每張卡都至少練過一次", () => {
+  const MB = require("../src/mathbank.js");
+  [false, true].forEach((u3) => {
+    const real = { cards: MB.CARDS, concepts: {}, figs: {} };
+    Object.keys(MB.CONCEPTS).forEach((k) => { real.concepts[k] = { unit: MB.CONCEPTS[k].unit }; });
+    let s = C.blankState(); s.settings.unit3 = u3;
+    for (let d = "2026-10-13"; d < C.EXAM; d = C.addDays(d, 1)) {
+      s = run(s, real, NOON(d), op("tick"));
+      s.days[d].planIds.forEach((id) => { s = run(s, real, NOON(d), op("answer", { cardId: id, ok: true })); });
+    }
+    const want = MB.CARDS.filter((c) => u3 || MB.CONCEPTS[c.concept].unit !== "3");
+    const miss = want.filter((c) => !(s.cards[c.id] && s.cards[c.id].seen > 0)).map((c) => c.id);
+    assert.deepEqual(miss, [], "unit3=" + u3 + " 考前沒排到：" + miss.join(","));
+  });
+});
+
+test("M3 新使用者第一題答錯、做完補救：換一題確認必須真的是同觀念的另一題（答錯就停輪、標待協助）", () => {
+  const b = bank(["s1", "s2", "s3"]); let s = C.blankState();
+  s = run(s, b, NOON(D), op("sessionStart", {}));
+  s = run(s, b, NOON(D), op("answer", { cardId: "s1", ok: false }));
+  s = run(s, b, NOON(D), op("labStart", { runId: "r9", lab: "x", tasks: 1, answer: 0, from: "wrong", card: "s1" }));
+  s = run(s, b, NOON(D), op("labPredict", { runId: "r9", choice: 0 }));
+  s = run(s, b, NOON(D), op("labTask", { runId: "r9", task: 0 }));
+  s = run(s, b, NOON(D), op("labComplete", { runId: "r9" }));
+  const v = s.session.queue[0];
+  assert.ok(v && v !== "s1", "要換一題");
+  assert.equal(s.session.kinds[v], "variation", "換的那一題要標成確認題");
+  const r = C.reduce(s, op("answer", { cardId: v, ok: false }), env(b, NOON(D)));
+  assert.equal(r.info.halted, true); assert.equal(r.state.help["1-1"].needsHelp, true);
+});

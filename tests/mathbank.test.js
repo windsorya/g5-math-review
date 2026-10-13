@@ -13,11 +13,49 @@ const eqf = (p, q) => p[0] * q[1] === p[1] * q[0];
 const lowest = (p) => G(p[0], p[1]) === 1;
 const num = (s) => +String(s).replace(/[^\d]/g, "");
 
+/* ---------- 幾何：用座標實算邊長、角度、對稱軸（不看題庫寫的答案） ---------- */
+const EPS = 1e-9;
+const regular = (n) => Array.from({ length: n }, (_, i) => [Math.cos(2 * Math.PI * i / n), Math.sin(2 * Math.PI * i / n)]);
+// 名稱 → 一個具體圖形的頂點。名稱不能唯一決定圖形（例如「等腰三角形」沒排除正三角形）就回 null ⇒ 該題不成立
+function shapeOf(name) {
+  const R = { "正三角形": 3, "正方形": 4, "正五邊形": 5, "正六邊形": 6, "正八邊形": 8 };
+  if (R[name]) return regular(R[name]);
+  if (/^長方形（長和寬不一樣長?）$/.test(name)) return [[0, 0], [4, 0], [4, 2], [0, 2]];   // 只寫「長方形」也可能是正方形 ⇒ 不成立
+  if (/^菱形（角不是直角）$/.test(name)) return [[0, 0], [2, 0], [3, Math.sqrt(3)], [1, Math.sqrt(3)]];   // 60°／120° 菱形
+  if (/^等腰三角形（.*(不是正三角形|底邊和腰不一樣長).*）$/.test(name)) return [[0, 0], [6, 0], [3, 4]];   // 腰 5、5，底 6
+  return null;
+}
+const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+function isRegular(P) {
+  const n = P.length, side = P.map((p, i) => dist(p, P[(i + 1) % n]));
+  const ang = P.map((p, i) => { const a = P[(i + n - 1) % n], b = P[(i + 1) % n], u = [a[0] - p[0], a[1] - p[1]], v = [b[0] - p[0], b[1] - p[1]];
+    return Math.acos((u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v))); });
+  return side.every((s) => Math.abs(s - side[0]) < EPS) && ang.every((a) => Math.abs(a - ang[0]) < 1e-7);
+}
+// 凸多邊形的對稱軸一定通過重心，且通過某個頂點或某條邊的中點：逐一試反射，數有幾條能把頂點集合映回自己
+function axesCount(P) {
+  const n = P.length, c = [P.reduce((s, p) => s + p[0], 0) / n, P.reduce((s, p) => s + p[1], 0) / n];
+  const cand = P.concat(P.map((p, i) => [(p[0] + P[(i + 1) % n][0]) / 2, (p[1] + P[(i + 1) % n][1]) / 2]));
+  const dirs = [];
+  cand.forEach((q) => { const t = Math.atan2(q[1] - c[1], q[0] - c[0]); const a = ((t % Math.PI) + Math.PI) % Math.PI;
+    if (Math.hypot(q[0] - c[0], q[1] - c[1]) > EPS && !dirs.some((d) => Math.abs(d - a) < 1e-7 || Math.abs(Math.abs(d - a) - Math.PI) < 1e-7)) dirs.push(a); });
+  return dirs.filter((a) => { const ux = Math.cos(a), uy = Math.sin(a);
+    return P.every((p) => { const x = p[0] - c[0], y = p[1] - c[1], d = x * ux + y * uy, r = [c[0] + 2 * d * ux - x, c[1] + 2 * d * uy - y];
+      return P.some((q) => dist(q, r) < 1e-7); }); }).length;
+}
+// 觀念題的答案鑰（人工審過，寫在測試裡，和題庫分開；題庫打亂或改錯正解位置就會紅）。不在表裡的觀念題 ⇒ 不通過
+const KEY = {
+  "g-use": "一天中每 2 小時的氣溫變化", "g-wave": "中間省略一段刻度，讓圖不會太高", "g-steep": "那一段變化最大",
+  "f-one": "所有的整數", "p-def": "每條邊都一樣長，每個角也都一樣大", "p-circle": "不是，圓沒有直的邊",
+  "s-para": "不是，找不到能對折重疊的線", "s-fold": "完全重疊", "s-edge": "一樣長", "s-point": "互相垂直，而且被對稱軸平分", "s-circle": "無限多條"
+};
+
 function expected(c) {
   const k = c.chk, R = c.opts[c.a];
   switch (k.k) {
-    case "argmax": return k.lab[k.v.indexOf(Math.max(...k.v))] === R;
-    case "maxrise": { let bi = 0; for (let i = 1; i < k.v.length - 1; i++) if (k.v[i + 1] - k.v[i] > k.v[bi + 1] - k.v[bi]) bi = i; return R === k.lab[bi] + " 到 " + k.lab[bi + 1]; }
+    case "argmax": { const m = Math.max(...k.v), hit = k.v.map((x, i) => x === m ? i : -1).filter((i) => i >= 0); return hit.length === 1 && k.lab[hit[0]] === R; }
+    case "maxrise": { const rise = k.v.slice(1).map((x, i) => x - k.v[i]), m = Math.max(...rise), hit = rise.map((r, i) => r === m ? i : -1).filter((i) => i >= 0);
+      return hit.length === 1 && R === k.lab[hit[0]] + " 到 " + k.lab[hit[0] + 1]; }
     case "firstdown": { const i = k.v.findIndex((x, j) => j < k.v.length - 1 && k.v[j + 1] < x); return R === k.lab[i] + " 到 " + k.lab[i + 1]; }
     case "isfactor": return k.n % num(R) === 0 && c.opts.filter((o, i) => i !== c.a).every((o) => k.n % num(o) !== 0);
     case "nfactors": return num(R) === divs(k.n).length;
@@ -42,8 +80,12 @@ function expected(c) {
     case "maxfrac": { let m = k.fs[0]; k.fs.forEach((f) => { if (f[0] * m[1] > m[0] * f[1]) m = f; }); return eqf(frac(R), m); }
     case "addsub": { const n = k.op === "+" ? k.a * k.d + k.c * k.b : k.a * k.d - k.c * k.b, d = k.b * k.d, f = frac(R);
       return eqf(f, [n, d]) && lowest(f) && c.opts.filter((o, i) => i !== c.a).every((o) => !eqf(frac(o), [n, d])); }
-    case "axes": return num(R) === { "正方形": 4, "長方形": 2, "正三角形": 3, "等腰三角形（兩腰一樣長）": 1, "正六邊形": 6, "正五邊形": 5 }[k.shape];
-    case "fact": return true;   // 觀念題：答案人工審（見 docs）
+    case "axes": { const P = shapeOf(k.shape); return !!P && num(R) === axesCount(P) && c.opts.every((o, i) => i === c.a || num(o) !== axesCount(P)); }
+    case "fact": {
+      const m = /^是非題：「(.+)是正多邊形。」$/.exec(c.q);
+      if (m) { const P = shapeOf(m[1]); return !!P && R === (isRegular(P) ? "對" : "錯"); }
+      return Object.prototype.hasOwnProperty.call(KEY, c.id) && KEY[c.id] === R;
+    }
     default: return false;
   }
 }
@@ -108,4 +150,34 @@ test("最多／最高類題目：答案唯一（沒有並列）", () => {
     const m = Math.max(...vals);
     assert.equal(vals.filter((x) => x === m).length, 1, c.id + " 有並列：" + vals.join(","));
   });
+});
+
+// Codex 2026-10-13 審查：舊版 fact 直接回傳 true、maxrise 抄產生器邏輯，把正方形改判成非正多邊形仍通過 ⇒ 幾何改用座標實算，並做突變自檢
+test("幾何驗算器本身：邊長／角度／對稱軸實算結果正確", () => {
+  assert.equal(isRegular(shapeOf("正方形")), true);
+  assert.equal(isRegular(shapeOf("正三角形")), true);
+  assert.equal(isRegular(shapeOf("長方形（長和寬不一樣長）")), false);
+  assert.equal(isRegular(shapeOf("菱形（角不是直角）")), false);
+  assert.equal(isRegular(shapeOf("等腰三角形（不是正三角形）")), false);
+  assert.deepEqual(["正三角形", "正方形", "正五邊形", "正六邊形", "長方形（長和寬不一樣長）", "菱形（角不是直角）", "等腰三角形（兩腰一樣長、底邊和腰不一樣長）"].map((n) => axesCount(shapeOf(n))), [3, 4, 5, 6, 2, 2, 1]);
+  assert.equal(shapeOf("等腰三角形（兩腰一樣長）"), null, "沒排除正三角形的等腰三角形不能唯一決定對稱軸數");
+  assert.equal(shapeOf("長方形"), null, "沒排除正方形的長方形不能唯一決定對稱軸數");
+});
+
+test("突變自檢：把題庫改錯，獨立驗算一定要抓到（在記憶體複本上改）", () => {
+  const clone = (c) => JSON.parse(JSON.stringify(c));
+  const flip = (c) => { const m = clone(c); m.a = m.opts.findIndex((o, i) => i !== m.a); return m; };
+  const sq = B.CARDS.find((c) => c.q === "是非題：「正方形是正多邊形。」");
+  assert.ok(sq && expected(sq), "原題要通過");
+  assert.equal(expected(flip(sq)), false, "把正方形改判成「不是正多邊形」必須紅");
+  // 每一張卡：把正解換成任一錯誤選項，驗算都必須不通過（含所有觀念題）
+  const survived = B.CARDS.filter((c) => expected(flip(c))).map((c) => c.id);
+  assert.deepEqual(survived, [], "正解被換掉卻仍通過：" + survived.join("、"));
+  // 折線：把資料改成兩段並列最多，maxrise 必須紅（不再沿用「取第一個」）
+  const up = clone(B.CARDS.find((c) => c.chk.k === "maxrise")); up.chk.v = [0, 4, 8, 9, 10];
+  up.opts = ["第 2 天 到 第 4 天", "第 4 天 到 第 6 天"].map((x) => x.replace(/第 (\d+) 天/g, (_, d) => up.chk.lab[+d / 2 - 1])); up.a = 0;
+  assert.equal(expected(up), false, "兩段並列最多時不得只認第一段");
+  // 對稱軸：等腰三角形不排除正三角形 ⇒ 必須紅
+  const s = clone(B.CARDS.find((c) => c.chk.k === "axes" && /等腰/.test(c.chk.shape))); s.chk.shape = "等腰三角形（兩腰一樣長）";
+  assert.equal(expected(s), false);
 });

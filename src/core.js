@@ -10,6 +10,7 @@
   var NEW_PER_DAY_DIAG = 10;      // 10/14 前的診斷期：先把教過的卡各做一遍
   var DIAG_END = "2026-10-17";   // 數學站 10/13 上線：前 4 天先把各觀念的卡各做一遍
   var MIX_START = "2026-10-26";
+  var EXAM = "2026-11-05";        // 期中考日（app.html 的倒數也用這個）
   var OPS_KEEP = 300;              // 去重用的操作 ID；一天最多約百筆操作
   var LOG_KEEP = 600;
   var RUNS_KEEP = 30;
@@ -90,7 +91,11 @@
       if (cs.seen > 0) { if (!retired(cs) && cs.due && cs.due <= day) due.push(c.id); }
       else fresh.push(c.id);
     });
-    var pick = {}; due.concat(fresh.slice(0, newQuota(day))).forEach(function (id) { pick[id] = 1; });
+    // 考前要每張卡都至少練過一次（Codex 審 e6c7ed6：固定每天 5 張，第六單元 18 題考前排不到）：
+    // 新卡配額＝max(原配額, 剩下沒練過的 ÷ 到考前還有幾天)，無條件進位。
+    var left = diffDays(day, EXAM), quota = newQuota(day);
+    if (left > 0) quota = Math.max(quota, Math.ceil(fresh.length / left));
+    var pick = {}; due.concat(fresh.slice(0, quota)).forEach(function (id) { pick[id] = 1; });
     return cards.filter(function (c) { return pick[c.id]; }).map(function (c) { return c.id; });   // 固定題庫順序
   }
   // 每日第一次操作就把當天計畫固定下來；之後匯入、開放單元都等隔天才納入（矩陣 29）
@@ -402,6 +407,9 @@
     var cands = enabledCards(s, bank).filter(function (c) {
       return c.concept === orig.concept && c.id !== orig.id && cardState(s, c.id).seen > 0;
     });
+    // 新使用者第一題就答錯時同觀念還沒有練過的卡（Codex 審 e6c7ed6）：退而用同觀念還沒練過的題，
+    // 不然畫面說「換一題確認」實際卻沒有確認題，再錯也不會停下來找爸媽。
+    if (!cands.length) cands = enabledCards(s, bank).filter(function (c) { return c.concept === orig.concept && c.id !== orig.id; });
     if (!cands.length) return null;
     if (wanted && cands.some(function (c) { return c.id === wanted; })) return wanted;
     var q = s.session ? s.session.queue : [];
@@ -566,18 +574,33 @@
     // migrateReason（只在 loadError=MIGRATE 時有值）：PARSE 解析失敗／VERSION 版本不支援／BAD_V1 結構不合法／WRITE 寫不進去
     var st = { state: blankState(), saveStatus: "ok", pendingAction: null, loadError: null, migrateReason: null, syncMode: "local", migrated: false };
     function env() { return { now: clock(), bank: bank }; }
+    // 多分頁（Codex 審 e6c7ed6）：每個分頁各有一份記憶體狀態；舊版直接拿自己那份算完就寫，
+    // 別的分頁剛存的作答會被蓋掉。現在記住「最後讀到／寫入的原文」，每次操作前先讀磁碟，
+    // 不一樣就換成磁碟上的最新版再套用這次操作（reducer 是純函式，重算即可）。
+    var lastRaw = null;
     function write(next) {
       var errs = checkState(next, bank);
       if (errs.length) return "invalid";
       if (st.loadError) return "blocked";
-      try { storage.setItem(LS_KEY, JSON.stringify(next)); return "ok"; } catch (e) { return "failed"; }
+      var txt = JSON.stringify(next);
+      try { storage.setItem(LS_KEY, txt); lastRaw = txt; return "ok"; } catch (e) { return "failed"; }
+    }
+    function refresh() {
+      if (st.loadError) return true;
+      var raw;
+      try { raw = storage.getItem(LS_KEY); } catch (e) { return false; }   // 讀不到就不寫，免得蓋掉看不到的資料
+      if (raw === null || raw === lastRaw) return true;
+      var r = decode(raw, bank);
+      if (!r.accepted) return false;
+      st.state = r.state; lastRaw = raw;
+      return true;
     }
     function load() {
       var raw = null, old = null;
       try { raw = storage.getItem(LS_KEY); } catch (e) { st.loadError = "READ"; st.saveStatus = "blocked"; return st; }
       if (raw !== null) {
         var r = decode(raw, bank);
-        if (r.accepted) st.state = r.state; else { st.loadError = r.error; st.saveStatus = "blocked"; }
+        if (r.accepted) { st.state = r.state; lastRaw = raw; } else { st.loadError = r.error; st.saveStatus = "blocked"; }
         return st;
       }
       try { old = storage.getItem(LS_V1); } catch (e) { st.loadError = "READ"; st.saveStatus = "blocked"; return st; }
@@ -601,6 +624,11 @@
       return true;
     }
     function dispatch(action) {
+      if (!refresh()) {   // 磁碟上的最新版讀不到或讀不懂：這次不寫（不拿舊的記憶體狀態蓋掉），有 id 的留著重試
+        st.saveStatus = "failed";
+        if (action && action.id && !st.pendingAction) st.pendingAction = action;
+        return { ok: false, error: "SAVE_FAILED", state: st.state };
+      }
       if (st.pendingAction && !(action && action.id && action.id === st.pendingAction.id)) {
         if (!flushPending()) return { ok: false, error: "SAVE_PENDING", pendingId: st.pendingAction.id, state: st.state };
       }
@@ -624,7 +652,7 @@
       if (st.loadError !== "SCHEMA" && st.loadError !== "MIGRATE") return false;
       var b0 = blankState();
       if (checkState(b0, bank).length) return false;
-      try { storage.setItem(LS_KEY, JSON.stringify(b0)); } catch (e) { st.saveStatus = "failed"; return false; }
+      try { storage.setItem(LS_KEY, JSON.stringify(b0)); lastRaw = JSON.stringify(b0); } catch (e) { st.saveStatus = "failed"; return false; }
       st.loadError = null; st.migrateReason = null; st.state = b0; st.saveStatus = "ok"; st.pendingAction = null;
       return true;
     }
@@ -672,7 +700,7 @@
   function dirName(az) { var D = ["北", "東北", "東", "東南", "南", "西南", "西", "西北"]; return D[Math.round((((az % 360) + 360) % 360) / 45) % 8]; }
 
   var api = {
-    LS_KEY: LS_KEY, LS_V1: LS_V1, DISSOLVE: DISSOLVE,
+    LS_KEY: LS_KEY, LS_V1: LS_V1, DISSOLVE: DISSOLVE, EXAM: EXAM,
     dayKey: dayKey, isDay: isDay, addDays: addDays, diffDays: diffDays, weekday: weekday,
     validCard: validCard, blankState: blankState, reduce: reduce, view: view, endTitle: endTitle, exitList: exitList,
     checkState: checkState, decode: decode, migrateV1: migrateV1, createStore: createStore,
