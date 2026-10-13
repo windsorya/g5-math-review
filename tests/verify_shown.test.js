@@ -337,3 +337,138 @@ test("題文數字超過安全整數上限要拒絕（不可偷偷失真後再�
   const r = V.verifyCard(card);
   assert.equal(r.ok, false, "大數題要被拒絕");
 });
+
+/* ---------- 大數精度驗收矩陣（docs/design-verify-bigint-codex-20261013.md (d)；第 4 輪 FAIL ec95886 後由 Codex 設計者給定） ---------- */
+// 題文整數／chk 數值限安全整數；分數選項保留精確 BigInt；整數算術以 BigInt 中間值計算、範圍檢查通過才轉 Number。
+const BIG = "9007199254740993";   // MAX_SAFE_INTEGER + 2：轉成 Number 會變成 9007199254740992
+const VPATH = process.env.VERIFY_SHOWN ? path.resolve(process.env.VERIFY_SHOWN) : path.join(__dirname, "verify_shown.js");
+const R1 = { id: "R1", q: BIG + "/10 ＋ 1/2 ＝？（寫成最簡分數）", opts: ["4503599627370499/5", "1/2"], a: 0,
+  chk: { k: "addsub", a: 9007199254740992, b: 10, c: 1, d: 2, op: "+" } };
+const R2 = { id: "R2", q: "植物高度：第 1 天 9007199254740993 公分、第 2 天 9007199254740995 公分、第 3 天 9007199254740997 公分。哪一段上升得最多？",
+  opts: ["第 1 天 到 第 2 天", "第 2 天 到 第 3 天"], a: 0 };
+const R3 = { id: "R3", q: "把 4503599627370495/3 擴分成分母是 6 的分數，分子是多少？", opts: ["9007199254740989", "9007199254740990"], a: 0 };
+const BIGOPT = { q: "1/100000001 ＋ 1/100000003 ＝？（寫成最簡分數）", opts: ["200000004/10000000400000003", "1/2"] };
+const wholeRejected = (r, why) => { assert.ok(r.issues.length > 0, why + " 要整題拒絕，實際沒有問題原因"); };
+
+test("大數 R1：分數加法題文 9007199254740993/10 ⇒ BAD_DATA、整卡 ok:false（chk 寫失真後的 …992 也不能核對通過）", () => {
+  const r = V.verifyCard(clone(R1));
+  assert.equal(r.ok, false, "R1 要被拒絕：" + r.issues.join(","));
+  assert.ok(r.issues.includes("BAD_DATA"), "R1 拒絕原因要含 BAD_DATA，實際：" + r.issues.join(","));
+  assert.deepEqual(r.analysis.correctIndices, [], "R1 不得解出正解");
+});
+test("大數 R2：折線資料超過安全整數 ⇒ BAD_DATA，不得選第一段", () => {
+  const a = V.analyzeShown({ q: R2.q, opts: R2.opts });
+  assert.ok(a.issues.includes("BAD_DATA"), "R2 要報 BAD_DATA，實際：" + a.issues.join(","));
+  assert.ok(!a.correctIndices.includes(0), "R2 不得選第一段");
+  const r = V.verifyCard(clone(R2));
+  assert.equal(r.ok, false); assert.ok(r.issues.includes("BAD_DATA"));
+});
+test("大數 R3：擴分 4503599627370495/3 → 分母 6，分子精確 9007199254740990（中間乘積超過安全範圍也不失真）", () => {
+  const a = V.analyzeShown({ q: R3.q, opts: R3.opts });
+  assert.deepEqual(a.issues, [], "R3 是合法題：" + a.issues.join(","));
+  assert.equal(a.solution, "9007199254740990");
+  assert.deepEqual(a.correctIndices, [1]);
+  const r = V.verifyCard(clone(R3));
+  assert.equal(r.ok, false); assert.ok(r.issues.includes("WRONG_KEY"), "a=0 要報 WRONG_KEY：" + r.issues.join(","));
+});
+["＋", "－"].forEach((op) => [0, 1, 2, 3].forEach((pos) => {
+  const n = ["1", "2", "1", "3"]; n[pos] = BIG;
+  const q = n[0] + "/" + n[1] + " " + op + " " + n[2] + "/" + n[3] + " ＝？";
+  test("大數 加減第 " + (pos + 1) + " 欄（" + q + "）⇒ BAD_DATA", () => {
+    const a = V.analyzeShown({ q, opts: ["1/1", "1/2"] });
+    assert.ok(a.issues.includes("BAD_DATA"), q + " 要報 BAD_DATA，實際：" + a.issues.join(","));
+    assert.deepEqual(a.correctIndices, []);
+  });
+}));
+test("大數 比較：9007199254740993/10 ○ 1/2 ⇒ BAD_DATA", () => {
+  const a = V.analyzeShown({ q: BIG + "/10 ○ 1/2，○ 裡要填 >、< 還是 =？", opts: [">", "<", "="] });
+  assert.ok(a.issues.includes("BAD_DATA"), a.issues.join(",")); assert.deepEqual(a.correctIndices, []);
+});
+test("大數 比較精度：99999999/100000000 ○ 100000000/100000001 ⇒ 索引 [1]，無錯誤", () => {
+  const a = V.analyzeShown({ q: "99999999/100000000 ○ 100000000/100000001，○ 裡要填 >、< 還是 =？", opts: [">", "<", "="] });
+  assert.deepEqual(a.issues, []); assert.deepEqual(a.correctIndices, [1]);
+});
+test("大數 大分數選項：1/100000001 ＋ 1/100000003 的超大分母選項照收（保留既有契約）", () => {
+  const a = V.analyzeShown(BIGOPT);
+  assert.deepEqual(a.issues, []); assert.deepEqual(a.correctIndices, [0]);
+});
+test("大數 整除：選項 9007199254740993 ÷ 3 ⇒ 整題拒絕", () => {
+  const c = { id: "dv", q: "下面哪一個算式是整除？", opts: [BIG + " ÷ 3", "4 ÷ 2"], a: 1, chk: { k: "divides", n: 4, d: 2 } };
+  const a = V.analyzeShown(shown(c));
+  wholeRejected(a, "整除"); assert.ok(a.issues.includes("BAD_DATA"), a.issues.join(",")); assert.ok(!a.correctIndices.includes(0));
+  assert.equal(V.verifyCard(c).ok, false);
+});
+test("大數 parseInt 路徑：吸管選項 9007199254740993 公分 ⇒ 整題拒絕（chk 核對也不得 parseInt 失真）", () => {
+  const c = { id: "tr", q: "下面哪一組三根吸管，可以圍成三角形？", opts: [BIG + " 公分、2 公分、3 公分", "3 公分、4 公分、5 公分"], a: 1,
+    chk: { k: "triok", sets: [[9007199254740991, 2, 3], [3, 4, 5]] } };
+  const a = V.analyzeShown(shown(c));
+  wholeRejected(a, "吸管"); assert.ok(a.issues.includes("BAD_DATA"), a.issues.join(",")); assert.ok(!a.correctIndices.includes(0));
+  assert.equal(V.verifyCard(c).ok, false);
+});
+test("大數 map(Number) 路徑：「2 的倍數」選項 9007199254740993 ⇒ 整題拒絕", () => {
+  const c = { id: "mu", q: "下面哪一個數是 2 的倍數？", opts: [BIG, "4"], a: 1, chk: { k: "rule", which: "是 2 的倍數", v: [9007199254740991, 4] } };
+  const a = V.analyzeShown(shown(c));
+  wholeRejected(a, "倍數"); assert.ok(a.issues.includes("BAD_DATA"), a.issues.join(",")); assert.ok(!a.correctIndices.includes(0));
+  assert.equal(V.verifyCard(c).ok, false);
+});
+test("大數 chk 入口：合法 1/2＋1/2 卡加 chk.extra=9007199254740992 ⇒ verifyCard 拒絕，analyzeShown 結果不變", () => {
+  const good = { id: "ck", q: "1/2 ＋ 1/2 ＝？", opts: ["1/1", "1/2"], a: 0, chk: { k: "addsub", a: 1, b: 2, c: 1, d: 2, op: "+" } };
+  const rg = V.verifyCard(clone(good));
+  assert.deepEqual(rg.issues, [], "合法卡要先通過");
+  const bad = clone(good); bad.chk.extra = 9007199254740992;
+  const rb = V.verifyCard(bad);
+  assert.equal(rb.ok, false, "chk 含超過安全範圍的數要被拒絕");
+  assert.deepEqual(rb.analysis, rg.analysis, "chk 不得影響獨立求解");
+  assert.deepEqual(V.analyzeShown(shown(bad)), rg.analysis);
+});
+test("大數 helper：mul(999999999,999999999)、add(MAX_SAFE_INTEGER,1) 拒絕轉回 Number（不產生近似值）", () => {
+  assert.equal(typeof V.mul, "function"); assert.equal(typeof V.add, "function");
+  assert.throws(() => V.mul(999999999, 999999999), (e) => e.code === "BAD_DATA");
+  assert.throws(() => V.add(Number.MAX_SAFE_INTEGER, 1), (e) => e.code === "BAD_DATA");
+  assert.equal(V.mul(99999, 99999), 9999800001);
+});
+test("大數 helper：mulDiv(4503599627370495,6,3) 精確 9007199254740990；div(1,0) 拒絕", () => {
+  assert.equal(typeof V.mulDiv, "function"); assert.equal(typeof V.div, "function");
+  assert.equal(V.mulDiv(4503599627370495, 6, 3), 9007199254740990);
+  assert.throws(() => V.div(1, 0), (e) => e.code === "BAD_DATA");
+  assert.equal(V.div(12, 4), 3);
+});
+// 回歸測試（設計檔註明：非舊碼紅）：沒有文法的題型不得因加了 helper 而被猜成功
+test("大數 回歸：平均題 ⇒ UNKNOWN_PATTERN", () => {
+  assert.ok(V.analyzeShown({ q: "2 和 4 的平均是多少？", opts: ["3", "4"] }).issues.includes("UNKNOWN_PATTERN"));
+});
+test("大數 回歸：面積題 ⇒ UNKNOWN_PATTERN", () => {
+  assert.ok(V.analyzeShown({ q: "長方形長 3 公分、寬 4 公分，面積是多少平方公分？", opts: ["12", "7"] }).issues.includes("UNKNOWN_PATTERN"));
+});
+test("大數 CLI：批次 R1、R2、R3、大分數選項 ⇒ JSON 可解析、拒絕／答案與 analyzeShown 一致、大整數不失真", () => {
+  const { spawnSync } = require("node:child_process");
+  const items = [R1, R2, R3, BIGOPT].map((c) => ({ q: c.q, opts: c.opts }));
+  const r = spawnSync(process.execPath, [VPATH], { input: JSON.stringify(items), encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.length, 4);
+  items.forEach((it, i) => {
+    const a = V.analyzeShown(it);
+    assert.deepEqual(out[i].issues, a.issues, i + " issues");
+    assert.deepEqual(out[i].correctIndices, a.correctIndices, i + " correctIndices");
+    assert.equal(out[i].solution, a.solution, i + " solution");
+  });
+  assert.ok(out[0].issues.includes("BAD_DATA") && out[1].issues.includes("BAD_DATA"));
+  assert.equal(out[2].solution, "9007199254740990"); assert.deepEqual(out[2].correctIndices, [1]);
+  assert.equal(out[2].parsed.numer, 9007199254740990);
+  assert.ok(r.stdout.includes("9007199254740990"), "CLI 原文要有精確分子");
+  assert.equal(out[3].solution, "200000004/10000000400000003");
+  assert.deepEqual(out[3].correctIndices, [0]);
+});
+test("大數 集中入口：數值入口以外的程式不得私自轉型或做整數算術", () => {
+  const src = fs.readFileSync(VPATH, "utf8");
+  const END = "/* ===== 數值入口結束 ===== */";
+  assert.ok(src.includes(END), "驗算器要有數值入口區段（以「" + END + "」結尾）");
+  const body = src.slice(src.indexOf(END) + END.length).split("\n").map((l) => l.replace(/\/\*.*?\*\//g, "").replace(/\s\/\/.*$/, ""));   // 去掉註解再掃
+  const banned = [[/\bNumber\(/, "Number("], [/\bparseInt\(|\bparseFloat\(/, "parseInt/parseFloat"], [/\bBigInt\(/, "BigInt("],
+    [/map\(Number\)/, "map(Number)"], [/[=(,:?]\s*\+[A-Za-z_$(]/, "一元 +"], [/\bMath\.(abs|min|max|sign)\b/, "Math 算術"],
+    [/ [*\/%] /, "* / %"], [/ - /, "減法"], [/\+\+|--/, "++/--"]];
+  const hits = [];
+  body.forEach((l) => banned.forEach(([re, name]) => { if (re.test(l)) hits.push(name + "：" + l.trim().slice(0, 80)); }));
+  assert.deepEqual(hits, []);
+});
