@@ -99,11 +99,34 @@ def flow_concepts(browser, label, device=None):
         pg.locator("#cMore").click()
         second = pg.locator("#main .remedy strong").first.inner_text()
         ok = ok and second != first and pg.locator("#main .remedy svg.fig").count() == 1 and pg.locator("#main .remedy li").count() >= 2
+        ok = ok and pg.locator("#main .vids button[data-play]").count() >= 1   # #1335：每個觀念頁都有影片
         if not ok or not no_overflow(pg):
             bad.append(cid)
         pg.locator("#cBack").click(); pg.wait_for_selector("#concepts .ccard")
     check(f"{label} 11 個觀念頁：兩種說法都有圖與步驟、沒有水平捲動", not bad, bad)
     check(f"{label} 觀念頁沒有 JS 錯誤", not errors, errors)
+    ctx.close()
+
+
+def flow_video_live(browser, label, device=None):
+    """只在線上版跑（#1335）：每個觀念頁按第一段影片播放，iframe 指向 youtube-nocookie、帶 referrerpolicy，播放器沒有錯誤 153。"""
+    ctx, pg, errors = open_page(browser, device)
+    bad = []
+    for cid in pg.evaluate("Object.keys(G5MathBank.CONCEPTS)"):
+        pg.locator(f'#concepts .ccard[data-cid="{cid}"]').click(); pg.wait_for_selector("#main .remedy")
+        b = pg.locator("#main .vids button[data-play]").first
+        b.click()
+        fr = pg.locator("#main .vids iframe").first
+        src, rp = fr.get_attribute("src"), fr.get_attribute("referrerpolicy")
+        pg.wait_for_timeout(5000)
+        try:
+            body = pg.frame_locator("#main .vids iframe").first.locator("body").inner_text(timeout=10000)
+        except Exception as e:
+            body = f"<讀不到：{e}>"
+        if "youtube-nocookie.com/embed/" not in (src or "") or rp != "strict-origin-when-cross-origin" or "153" in body or "無法播放" in body:
+            bad.append((cid, src, body[:80]))
+        pg.locator("#cBack").click(); pg.wait_for_selector("#concepts .ccard")
+    check(f"{label} 11 個觀念的影片都能嵌入播放（無錯誤 153）", not bad, bad)
     ctx.close()
 
 
@@ -120,6 +143,8 @@ def flow_review(browser):
 def main():
     with sync_playwright() as p:
         cr = p.chromium.launch()
+        if BASE.startswith("https:"):
+            flow_video_live(cr, "線上Chromium")
         flow_main(cr, "桌機", {"viewport": {"width": 1280, "height": 900}})
         flow_main(cr, "手機390", {"viewport": {"width": 390, "height": 844}, "is_mobile": True, "has_touch": True, "device_scale_factor": 2})
         flow_concepts(cr, "手機390", {"viewport": {"width": 390, "height": 844}, "is_mobile": True, "has_touch": True})

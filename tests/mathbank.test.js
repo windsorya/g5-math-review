@@ -88,3 +88,15 @@ test("正解位置分散：不會全部都是第 1 個選項", () => {
   const pos = [0, 0, 0, 0]; B.CARDS.forEach((c) => pos[c.a]++);
   assert.ok(pos[0] < B.CARDS.length * 0.5, "第 1 個選項是正解的比例太高：" + pos.join(","));
 });
+
+// 律師 2026-10-13「數學複習似乎都沒有加上影片，建議都加上嗎」（#1335）：每個會出題的觀念至少一段驗證過的影片，否則不能上線。
+test("每個會出題的觀念至少一段影片（欄位齊全、起訖秒數合理）", () => {
+  const V = require("../src/mathvideos.js");
+  const used = new Set(B.CARDS.map((c) => c.concept));
+  const missing = [...used].filter((k) => !(Array.isArray(V[k]) && V[k].length));
+  assert.deepEqual(missing, [], "沒有影片的觀念：" + missing.join("、"));
+  Object.keys(V).forEach((k) => V[k].forEach((v) => {
+    assert.ok(/^[\w-]{11}$/.test(v.id) && v.title && v.channel && v.note, k + " 影片欄位不齊：" + JSON.stringify(v));
+    assert.ok(Number.isInteger(v.start) && v.start >= 0 && (v.end === null || (Number.isInteger(v.end) && v.end > v.start)), k + " 起訖秒數不對：" + JSON.stringify(v));
+  }));
+});

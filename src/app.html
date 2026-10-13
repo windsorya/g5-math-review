@@ -230,6 +230,7 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
 <!--@INLINE src/tones.js-->
 <!--@INLINE src/mathbank.js-->
 <!--@INLINE src/mathexplain.js-->
+<!--@INLINE src/mathvideos.js-->
 <!--@INLINE src/core.js-->
 <script>
 (function(){
@@ -464,7 +465,7 @@ function renderConcept(cid){
   var el=$("#main");
   el.innerHTML='<div style="display:grid;gap:14px"><div class="qhead"><span>'+esc(UNITS[c.unit])+'</span><span>'+STAGE[v.stages[cid]]+'</span></div><h2>'+esc(c.title)+'</h2>'+
     (stuck?'<div class="banner info"><strong>這個觀念先和爸媽一起看圖解</strong><span class="small">爸媽在「家長摘要」按「已經陪她看過」以後，再來練這個觀念的題目。</span></div>':'')+
-    explainBlock(ex)+
+    explainBlock(ex)+videoBlock(cid)+
     '<div class="row"><button class="btn" type="button" id="cLab">跟著算一題</button>'+(mine&&!v.completed&&!stuck?'<button class="btn ghost" type="button" id="cFocus">先練這個觀念（今天 '+mine+' 張）</button>':'')+
     (stuck?'':'<button class="btn ghost" type="button" id="cAll">練這個觀念的全部 '+conceptCards(cid).length+' 題</button>')+
     '<button class="btn ghost" type="button" id="cMore">換另一種說法</button><button class="btn ghost sm" type="button" id="cBack">回首頁</button></div></div>';
@@ -473,6 +474,7 @@ function renderConcept(cid){
   on("#cAll",function(){beginRound({type:"sessionStart",kind:"review",ids:conceptCards(cid)});});
   on("#cMore",function(){var b=$("#main .remedy");if(b)b.outerHTML=explainBlock(EXPLAIN[cid][1]);$("#cMore").hidden=true;});
   on("#cBack",renderHome);
+  wireVideos(el);
   el.scrollIntoView({behavior:"smooth",block:"start"});
 }
 function askLine(ex){return '<div class="hint"><strong>給爸媽：</strong>先讓她說，不直接報答案。可以追問：「'+esc(ex.ask)+'」</div>';}
@@ -659,7 +661,7 @@ function remedy(c){
     (prev?'<div class="prev">上次 '+md(prev.last)+' 你也在這個觀念卡住。<br>先指給爸媽看：是哪一步想不通？'+(T?'指出下面的第幾格。':'')+'</div>':'')+
     (T?stepsBlock(tp)+backToQ(c):'')+
     (!T?exBlock(ex,false):prev?exBlock(ex,true):'')+
-    videoBlock(tp)+askLine(T||ex)+
+    videoBlock(tp||c.concept)+askLine(T||ex)+
     '<div class="task"><strong>跟著算</strong><span>'+esc(ex.task)+'</span></div>'+
     '<div class="row"><button class="btn" type="button" id="toLab">跟著算一題，再換一題確認</button><button class="btn ghost sm" type="button" id="skipRemedy">先跳過，下一題</button></div></div>';
   $("#ansBox").insertAdjacentHTML("beforeend",h);
