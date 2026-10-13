@@ -108,25 +108,51 @@ def flow_concepts(browser, label, device=None):
     ctx.close()
 
 
+# 播放器畫面出現這些字＝不能播（YouTube 嵌入錯誤頁；英文介面與中文介面都列）。比對時不分大小寫。
+PLAYER_ERROR_MARKS = ("video unavailable", "this video is private", "private video", "error 153", "錯誤 153", "153",
+                      "無法播放", "影片無法觀看", "私人影片", "an error occurred", "發生錯誤")
+
+
+def player_problem(src, rp, read_body):
+    """判斷一個嵌入播放器能不能播；回傳問題說明，能播回傳 None。
+    read_body() 讀播放器 iframe 的 body 文字；讀不到（逾時、例外）或讀到空白都算失敗——
+    Codex 審 236d77d2：舊版捕捉例外後只設 body，全部逾時／空白／Video unavailable 都 PASS。"""
+    if "youtube-nocookie.com/embed/" not in (src or ""):
+        return f"iframe 沒指向 youtube-nocookie：{src}"
+    if rp != "strict-origin-when-cross-origin":
+        return f"referrerpolicy 不對：{rp}"
+    try:
+        body = read_body()
+    except Exception as e:  # noqa: BLE001 — 任何讀取失敗都是播放失敗
+        return f"讀不到播放器內容（{type(e).__name__}：{str(e)[:60]}）"
+    text = (body or "").strip()
+    if not text:
+        return "播放器內容空白"
+    low = text.lower()
+    hit = next((m for m in PLAYER_ERROR_MARKS if m.lower() in low), None)
+    if hit:
+        return f"播放器顯示錯誤（{hit}）：{text[:80]}"
+    return None
+
+
 def flow_video_live(browser, label, device=None):
-    """只在線上版跑（#1335）：每個觀念頁按第一段影片播放，iframe 指向 youtube-nocookie、帶 referrerpolicy，播放器沒有錯誤 153。"""
+    """只在線上版跑（#1335）：每個觀念頁按第一段影片播放，iframe 指向 youtube-nocookie、帶 referrerpolicy，
+    播放器讀得到內容、不是空白、沒有 Video unavailable／private／錯誤 153。任何一個觀念失敗就記 FAIL。"""
     ctx, pg, errors = open_page(browser, device)
     bad = []
-    for cid in pg.evaluate("Object.keys(G5MathBank.CONCEPTS)"):
+    cids = pg.evaluate("Object.keys(G5MathBank.CONCEPTS)")
+    for cid in cids:
         pg.locator(f'#concepts .ccard[data-cid="{cid}"]').click(); pg.wait_for_selector("#main .remedy")
         b = pg.locator("#main .vids button[data-play]").first
         b.click()
         fr = pg.locator("#main .vids iframe").first
         src, rp = fr.get_attribute("src"), fr.get_attribute("referrerpolicy")
         pg.wait_for_timeout(5000)
-        try:
-            body = pg.frame_locator("#main .vids iframe").first.locator("body").inner_text(timeout=10000)
-        except Exception as e:
-            body = f"<讀不到：{e}>"
-        if "youtube-nocookie.com/embed/" not in (src or "") or rp != "strict-origin-when-cross-origin" or "153" in body or "無法播放" in body:
-            bad.append((cid, src, body[:80]))
+        why = player_problem(src, rp, lambda: pg.frame_locator("#main .vids iframe").first.locator("body").inner_text(timeout=10000))
+        if why:
+            bad.append((cid, why))
         pg.locator("#cBack").click(); pg.wait_for_selector("#concepts .ccard")
-    check(f"{label} 11 個觀念的影片都能嵌入播放（無錯誤 153）", not bad, bad)
+    check(f"{label} {len(cids)} 個觀念的影片都能嵌入播放（讀得到、非空白、無 unavailable／private／錯誤 153）", cids and not bad, bad or "沒有任何觀念")
     ctx.close()
 
 

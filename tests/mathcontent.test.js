@@ -137,7 +137,10 @@ function exitDups(concepts, cards) {
       const qn = norm(c.q.replace(/[？?].*$/, ""));
       const sameText = qn.length >= 4 && (en.includes(qn) || qn.includes(en));
       // 同一單元裡數字組一樣（例如 4b 出口題 vs 4a 練習都用 2/3、3/4）就算同題
-      const sameNums = et && unitOf(c.concept) === unitOf(k) && (toks(c.q) === et || c.opts.some((o) => toks(c.q + " " + o) === et));
+      // 子集也算（Codex 審 0995e02：出口題 6、9 的最小公倍數 vs 練習「每 9／6 分鐘、7 點」多一個 7 就漏判）
+      const sub = (small, big) => { const bb = big.split(","); return small.split(",").every((x) => { const i = bb.indexOf(x); if (i < 0) return false; bb.splice(i, 1); return true; }); };
+      const sameNums = et && et.split(",").length >= 2 && unitOf(c.concept) === unitOf(k) &&
+        (sub(et, toks(c.q)) || c.opts.some((o) => sub(et, toks(c.q + " " + o))));
       if (sameText || sameNums) out.push(k + " 出口題「" + e + "」＝" + c.id + "「" + c.q + "」");
     });
   });
@@ -153,4 +156,50 @@ test("⑤-b 比對器自檢：已知重複（1/2＋1/3、約分 18/24、長方�
     { id: "x3", concept: "5a", q: "長方形有幾條對稱軸？", opts: [] }, { id: "x4", concept: "3c", q: "六邊形的內角和是幾度？", opts: [] },
     { id: "x5", concept: "3b", q: "下面哪一組三根吸管，可以圍成三角形？", opts: ["2 公分、3 公分、6 公分", "3 公分、4 公分、8 公分"] }];
   assert.equal(exitDups(fake, cards).length, 5);
+  // Codex 審 0995e02 的反例：練習題多一個數字（7 點）仍是同一組數字
+  assert.equal(exitDups({ "2b": { exit: "6 和 9 的最小公倍數是多少？" } }, [{ id: "m3wp", concept: "2b", q: "甲車每 9 分鐘、乙車每 6 分鐘發一班，7 點同時發車，下一次同時發車是幾點幾分？", opts: [] }]).length, 1);
+});
+
+// ⑥ 題目文字與驗算資料（chk）一致（Codex 審 0995e02：驗算只讀 chk，把 g2up 題面 15 改回 14、chk 不動，93 項全過）
+const CN = { "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10, "正方形": 4, "長方形": 4 };
+function shownNums(c) {
+  let s = String(c.q + " " + (c.opts || []).join(" ")).replace(/<[^>]*>/g, " ");
+  Object.keys(CN).forEach((k) => { s = s.split(k).join(" " + CN[k] + " "); });
+  return (s.match(/\d+/g) || []).map(Number);
+}
+function chkNums(o, out) {
+  if (typeof o === "number") out.push(o);
+  else if (Array.isArray(o)) o.forEach((x) => chkNums(x, out));
+  else if (o && typeof o === "object") Object.keys(o).forEach((k) => { if (k !== "k") chkNums(o[k], out); });
+  return out;
+}
+function textMismatch(c) {
+  if (!c.chk) return [];
+  const bad = [], seenN = shownNums(c);
+  chkNums(c.chk, []).forEach((n) => { if (!seenN.includes(n)) bad.push(c.id + "：chk 的 " + n + " 不在題目或選項裡"); });
+  // 折線類：題面要逐點寫「標籤 數值」，成對才算一致
+  if (Array.isArray(c.chk.lab) && Array.isArray(c.chk.v)) c.chk.lab.forEach((l, i) => {
+    if (!String(c.q).includes(l + " " + c.chk.v[i])) bad.push(c.id + "：題面沒有「" + l + " " + c.chk.v[i] + "」");
+  });
+  return bad;
+}
+test("⑥題目文字與驗算資料一致：chk 的數字都在題目或選項裡、折線類逐點成對", () => {
+  assert.deepEqual(B.CARDS.map(textMismatch).flat(), []);
+});
+test("⑥-b 自檢：只改題面數字、chk 不動，要抓到", () => {
+  const g = JSON.parse(JSON.stringify(B.CARDS.find((c) => c.id === "g2up")));
+  g.q = g.q.replace("第 10 天 15 公分", "第 10 天 14 公分");
+  assert.ok(textMismatch(g).length, "g2up 題面改成 14 公分應該要抓到");
+});
+
+// ⑦ 名稱不能唯一決定圖形時，問「是不是／有幾條」要先排除特例（Codex 審 0995e02：先猜題 5a 只說長方形，正方形的對角線就是對稱軸）
+function shapeAmbiguity(items) {
+  return items.filter((x) => /長方形/.test(x.q) && /對稱軸|對角線|正多邊形/.test(x.q) && !/長和寬不一樣長|不是正方形/.test(x.q)).map((x) => x.id + "：" + x.q);
+}
+const allQs = () => B.CARDS.map((c) => ({ id: c.id, q: c.q })).concat(Object.keys(X.PREDICT || {}).map((k) => ({ id: "先猜 " + k, q: X.PREDICT[k].q })));
+test("⑦題卡與先猜題問長方形的對稱軸／對角線時要排除正方形", () => {
+  assert.deepEqual(shapeAmbiguity(allQs()), []);
+});
+test("⑦-b 自檢：「長方形的對角線是不是對稱軸？」要抓到", () => {
+  assert.equal(shapeAmbiguity([{ id: "x", q: "先猜猜看：長方形的對角線是不是對稱軸？" }]).length, 1);
 });
