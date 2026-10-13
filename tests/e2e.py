@@ -54,6 +54,7 @@ def flow_main(browser, label, device=None):
     check(f"{label} 11 個觀念入口", pg.locator("#concepts .ccard").count() == 11, pg.locator("#concepts .ccard").count())
     check(f"{label} 小考複習列出第 1～6 單元", all(pg.locator(f'button[data-rv="u{u}"]').count() == 1 for u in ["m1", "m2", "m3", "m4", "m5", "m6"]))
     check(f"{label} 沒有水平捲動", no_overflow(pg))
+    check(f"{label} 三站切換列（#1333）：三項、目前站是「五上數學複習」", pg.locator("#siteNav a, #siteNav [aria-current]").count() == 3 and pg.locator('#siteNav [aria-current="page"]').inner_text() == "五上數學複習")
     pg.locator("#goAll").click()
     pg.wait_for_selector("#main .q")
     c, _ = answer(pg, True)
