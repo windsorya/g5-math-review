@@ -61,7 +61,8 @@ STD_SITES = {"sci": ("https://windsorya.github.io/g5-sci-review/", "五上自然
              "math": ("https://windsorya.github.io/g5-math-review/", "五上數學複習"),
              "help": ("https://windsorya.github.io/g5-help/", "難題解說"),
              "chi": ("https://windsorya.github.io/g5-chinese-review/", "五上國語複習"),
-             "soc": ("https://windsorya.github.io/g5-social-review/", "五上社會複習")}
+             "soc": ("https://windsorya.github.io/g5-social-review/", "五上社會複習"),
+             "wrong": ("https://windsorya.github.io/g5-wrong-review/", "錯題複習")}
 # ④切換列：#siteNav 恰一個；裡面每個 <a> 的 a.href（瀏覽器解析後）恰為另外兩站、看得見；恰一個 aria-current="page" 且字是本站名。
 STD_NAV_JS = """() => { const navs = document.querySelectorAll('#siteNav'), nav = navs[0];
   if (navs.length !== 1) return {navs: navs.length};
@@ -289,7 +290,7 @@ def flow_main(browser, label, device=None):
     check(f"{label} 11 個觀念入口", pg.locator("#concepts .ccard").count() == 11, pg.locator("#concepts .ccard").count())
     check(f"{label} 小考複習列出第 1～6 單元", all(pg.locator(f'button[data-rv="u{u}"]').count() == 1 for u in ["m1", "m2", "m3", "m4", "m5", "m6"]))
     check(f"{label} 沒有水平捲動", no_overflow(pg))
-    check(f"{label} 五站切換列（#1333＋#1351）：五項、目前站是「五上數學複習」", pg.locator("#siteNav a, #siteNav [aria-current]").count() == 5 and pg.locator('#siteNav [aria-current="page"]').inner_text() == "五上數學複習")
+    check(f"{label} 六站切換列（#1333＋#1351＋錯題複習）：六項、目前站是「五上數學複習」", pg.locator("#siteNav a, #siteNav [aria-current]").count() == 6 and pg.locator('#siteNav [aria-current="page"]').inner_text() == "五上數學複習")
     pg.locator("#goAll").click()
     pg.wait_for_selector("#main .q")
     c, _ = answer(pg, True)

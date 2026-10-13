@@ -184,7 +184,7 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
 
 <div class="wrap">
   <!-- 三站切換（2026-10-13 律師：「為何沒有回到首頁的按鈕」，交辦 #1333）：自然、數學、難題解說互相點得到 -->
-  <nav id="siteNav" aria-label="切換網站" style="display:flex;flex-wrap:wrap;gap:8px;padding-top:12px;font-size:16px;min-height:44px;align-items:center"><a href="https://windsorya.github.io/g5-sci-review/" style="padding:8px 14px;border-radius:999px;border:2px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)">五上自然複習</a><span aria-current="page" style="padding:8px 14px;border-radius:999px;background:var(--pri);color:var(--on-pri);font-weight:700">五上數學複習</span><a href="https://windsorya.github.io/g5-chinese-review/" style="padding:8px 14px;border-radius:999px;border:2px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)">五上國語複習</a><a href="https://windsorya.github.io/g5-social-review/" style="padding:8px 14px;border-radius:999px;border:2px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)">五上社會複習</a><a href="https://windsorya.github.io/g5-help/" style="padding:8px 14px;border-radius:999px;border:2px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)">難題解說</a></nav>
+  <nav id="siteNav" aria-label="切換網站" style="display:flex;flex-wrap:wrap;gap:8px;padding-top:12px;font-size:16px;min-height:44px;align-items:center"><a href="https://windsorya.github.io/g5-sci-review/" style="padding:8px 14px;border-radius:999px;border:2px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)">五上自然複習</a><span aria-current="page" style="padding:8px 14px;border-radius:999px;background:var(--pri);color:var(--on-pri);font-weight:700">五上數學複習</span><a href="https://windsorya.github.io/g5-chinese-review/" style="padding:8px 14px;border-radius:999px;border:2px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)">五上國語複習</a><a href="https://windsorya.github.io/g5-social-review/" style="padding:8px 14px;border-radius:999px;border:2px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)">五上社會複習</a><a href="https://windsorya.github.io/g5-wrong-review/" style="padding:8px 14px;border-radius:999px;border:2px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)">錯題複習</a><a href="https://windsorya.github.io/g5-help/" style="padding:8px 14px;border-radius:999px;border:2px solid var(--line);color:var(--ink);text-decoration:none;background:var(--card)">難題解說</a></nav>
   <header class="hero" id="hero">
     <div class="txt"><h1>五上數學複習</h1><span>第一次定期評量 11/5（四）～11/6（五）<span class="left">・還有 <b id="days">–</b> 天</span></span></div>
     <svg class="sky" id="sky" aria-hidden="true" viewBox="0 0 820 60" style="height:60px"></svg>
@@ -1655,7 +1655,9 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
       var raw;
       try { raw = storage.getItem(LS_KEY); } catch (e) { return false; }   // 讀不到就不寫，免得蓋掉看不到的資料
       if (raw === lastRaw) return true;
-      if (raw === null) return false;   // 原本有存檔、現在被別處整個刪掉：不把記憶體裡的舊紀錄寫回去（Codex 審 2e70601）
+      // 原本有存檔、現在被別處整個刪掉：磁碟是唯一真相，沒有存檔＝空白紀錄。換成空白再套用這次操作——
+      // 舊紀錄不會被寫回去（Codex 審 2e70601），清除與重試也照常成功（Codex 審 8362c82／fd585e3：上一版一律拒寫，頁面卡死）。
+      if (raw === null) { st.state = blankState(); lastRaw = null; return true; }
       var r = decode(raw, bank);
       if (!r.accepted) return false;
       st.state = r.state; lastRaw = raw;

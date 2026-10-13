@@ -33,6 +33,7 @@ const SITES = {
   help: { url: "https://windsorya.github.io/g5-help/", name: "難題解說" },
   chi: { url: "https://windsorya.github.io/g5-chinese-review/", name: "五上國語複習" },
   soc: { url: "https://windsorya.github.io/g5-social-review/", name: "五上社會複習" },
+  wrong: { url: "https://windsorya.github.io/g5-wrong-review/", name: "錯題複習" },
 };
 const YT_ID = /^[A-Za-z0-9_-]{11}$/;
 const isNum = (x) => typeof x === "number" && Number.isFinite(x);
