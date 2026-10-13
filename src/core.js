@@ -589,7 +589,8 @@
       if (st.loadError) return true;
       var raw;
       try { raw = storage.getItem(LS_KEY); } catch (e) { return false; }   // 讀不到就不寫，免得蓋掉看不到的資料
-      if (raw === null || raw === lastRaw) return true;
+      if (raw === lastRaw) return true;
+      if (raw === null) return false;   // 原本有存檔、現在被別處整個刪掉：不把記憶體裡的舊紀錄寫回去（Codex 審 2e70601）
       var r = decode(raw, bank);
       if (!r.accepted) return false;
       st.state = r.state; lastRaw = raw;
@@ -616,6 +617,7 @@
     // 先把待重試的操作補寫；補不進去就不接受新操作（不讓 tick 之類的操作把它沖掉）
     function flushPending() {
       if (!st.pendingAction) return true;
+      if (!refresh()) { st.saveStatus = "failed"; return false; }
       var a = st.pendingAction, r = reduce(st.state, a, env());
       if (r.error || r.dup) { st.pendingAction = null; return true; }
       var w = write(r.state);
@@ -624,13 +626,15 @@
       return true;
     }
     function dispatch(action) {
-      if (!refresh()) {   // 磁碟上的最新版讀不到或讀不懂：這次不寫（不拿舊的記憶體狀態蓋掉），有 id 的留著重試
-        st.saveStatus = "failed";
-        if (action && action.id && !st.pendingAction) st.pendingAction = action;
-        return { ok: false, error: "SAVE_FAILED", state: st.state };
-      }
+      // 先處理既有的待存操作（它自己會先讀磁碟）；補不進去就照舊回 SAVE_PENDING，畫面才會保留原本那筆
+      // （Codex 審 2e70601：上一版先 refresh、失敗就回 SAVE_FAILED，畫面把待存換成新的那筆，恢復後重試只存舊的）。
       if (st.pendingAction && !(action && action.id && action.id === st.pendingAction.id)) {
         if (!flushPending()) return { ok: false, error: "SAVE_PENDING", pendingId: st.pendingAction.id, state: st.state };
+      }
+      if (!refresh()) {   // 磁碟上的最新版讀不到、讀不懂或被刪掉：這次不寫（不拿舊的記憶體狀態蓋掉），有 id 的留著重試
+        st.saveStatus = "failed";
+        if (action && action.id) st.pendingAction = action;
+        return { ok: false, error: "SAVE_FAILED", state: st.state };
       }
       var r = reduce(st.state, action, env());
       if (r.error || r.dup) {
