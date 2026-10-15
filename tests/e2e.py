@@ -544,11 +544,11 @@ def flow_a17(browser):
     cids = pg.evaluate("Object.keys(G5MathBank.CONCEPTS)")
     bank = pg.evaluate("G5MathBank.CARDS.map(function(c){return [c.q, c.opts];})")   # 只取 q／opts 核對畫面，不取 a
     ctx.close()
-    seen, problems = {}, []
+    seen, problems, err_lists = {}, [], [errors]
     for cid in cids:
         for k in range(4):   # 第 k 輪：每張卡點畫面上第 k 個按鈕（卡片選項最多 4 個）；每輪都是全新的瀏覽器狀態
             ctx, pg, errs = open_page(browser)
-            errors += errs
+            err_lists.append(errs)   # 存清單本身，作答時才發生的 pageerror 也收得到（Codex 審 07656942：errors += errs 在作答前就複製，之後的錯誤全漏）
             pg.locator(f'#concepts .ccard[data-cid="{cid}"]').click(); pg.wait_for_selector("#cAll", timeout=A17_OPEN_MS)
             pg.locator("#cAll").click(); pg.wait_for_selector("#main .q", timeout=A17_OPEN_MS)
             for _ in range(80):
@@ -587,7 +587,85 @@ def flow_a17(browser):
     mismatch = [f"{it['q'][:30]}｜{it['opts'][i]}：UI {'判對' if it['judged'][i] else '判錯'}，驗算 {'正解' if i in s['correctIndices'] else '錯誤'}"
                 for it, s in zip(items, sol) for i in sorted(it["judged"]) if it["judged"][i] != (i in s["correctIndices"])]
     check(f"A17 實際點擊 {clicks} 次：只有獨立求得的唯一正解被 UI 判對", clicks and not mismatch, mismatch[:8])
+    errors = [e for es in err_lists for e in es]
     check("A17 作答過程沒有 JS 錯誤", not errors, errors[:3])
+
+
+def selftest_a17_errors():
+    """A17 錯誤收集的替身測試（不開瀏覽器；Codex 審 07656942）：載入時、點選項後、按下一題後才發生的 pageerror，
+    都要讓「A17 作答過程沒有 JS 錯誤」轉紅；沒有錯誤時要綠。替身頁照 flow_a17 實際呼叫的 locator／evaluate 回應。"""
+    g = globals()
+    card = ("1/2 ○ 1/3，○ 裡要填 >、< 還是 =？", [">", "<", "="])
+
+    class Ctx:
+        def close(self):
+            pass
+
+    class Loc:
+        def __init__(self, pg, sel):
+            self.pg, self.sel = pg, sel
+
+        def nth(self, i):
+            return self
+
+        def click(self):
+            if self.sel == "#main .opt":
+                self.pg.answered = True
+            if self.pg.inject == self.sel:
+                self.pg.errs.append(f"Error: 點 {self.sel} 後拋錯（替身）")
+
+        def inner_text(self):
+            return "答對了"
+
+        def count(self):
+            return 1
+
+    class Page:
+        def __init__(self, errs, inject):
+            self.errs, self.inject, self.answered = errs, inject, False
+            if inject == "load":
+                errs.append("Error: 載入時拋錯（替身）")
+
+        def locator(self, sel):
+            return Loc(self, sel)
+
+        def wait_for_selector(self, *a, **k):
+            pass
+
+        def evaluate(self, js):
+            if js == "Object.keys(G5MathBank.CONCEPTS)":
+                return ["c1"]
+            if js.startswith("G5MathBank.CARDS"):
+                return [list(card)]
+            return None if self.answered else {"q": card[0], "opts": card[1], "dom": [0, 1, 2], "hidden": 0}
+
+    def fake_open(inject):
+        opened = []
+
+        def op(browser, *a, **k):
+            errs = []
+            opened.append(1)
+            return Ctx(), Page(errs, "load" if inject == "first" and len(opened) == 1 else inject), errs
+        return op
+
+    name = "A17 作答過程沒有 JS 錯誤"
+    cases = [("沒有錯誤", None, True), ("載入時", "load", False), ("只有讀題庫那一頁", "first", False),
+             ("點選項後（Codex 反例）", "#main .opt", False), ("按下一題後", "#next", False)]
+    saved, wrong = {k: g[k] for k in ("open_page", "check", "solve_shown")}, []
+    try:
+        for label, inject, want in cases:
+            got = {}
+            g["open_page"] = fake_open(inject)
+            g["check"] = lambda n, cond, detail="": got.__setitem__(n, bool(cond))
+            g["solve_shown"] = lambda items: [{"issues": [], "correctIndices": [0]} for _ in items]
+            flow_a17(None)
+            if got.get(name) is None:
+                wrong.append(f"{label}：flow_a17 沒有產出「{name}」這一項")
+            elif got[name] != want:
+                wrong.append(f"{label}：應判{'沒錯誤' if want else '有錯誤'}，判成{'沒錯誤' if got[name] else '有錯誤'}")
+    finally:
+        g.update(saved)
+    check(f"A17 錯誤收集替身測試：{len(cases)} 種時點（含作答後才拋錯）都判對", not wrong, wrong)
 
 
 # 補題區（交辦 #1618）：家長打開才載入 g5-help/upload.js；本機測試用 g5-help 的原始碼頂替（還沒上線的版本也測得到），GAS 一律攔截不打真後端。
@@ -656,6 +734,7 @@ def flow_upload(browser, subject, site, bank_global):
 def main():
     with sync_playwright() as p:
         selftest_player()
+        selftest_a17_errors()
         cr = p.chromium.launch()
         flow_standard_dom(cr)
         if BASE.startswith("https:"):
