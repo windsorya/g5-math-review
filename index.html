@@ -2648,6 +2648,9 @@ function openLab(cid,ctx){
   el.scrollIntoView({behavior:"smooth",block:"start"});
 }
 function run(){return S().labRuns[lab.runId];}
+// 存檔被別處清掉（或同步換檔）後，這次例題的紀錄已不在磁碟上，核心回 NO_RUN：照磁碟現況回首頁，不留在原畫面按了沒反應
+// （Codex 審 g5-chinese-review c28888ed #1541，四站同型；同 c97d0d8「再練答錯的」）
+function labGone(r){if(!r||r.error!=="NO_RUN")return false;stopAnim();renderHome();return true;}
 function drawPredict(){
   var rr=run(), pr=lab.pr, all=rr.tasksDone.length>=rr.tasks;
   var h='<strong>'+esc(pr.q)+'</strong><div class="chips">'+pr.opts.map(function(o,i){return '<button class="chip'+(rr.prediction===i?' sel':'')+'" type="button" data-g="'+i+'"'+(rr.prediction!==null?' disabled':'')+'>'+esc(o)+'</button>';}).join("")+'</div>';
@@ -2657,7 +2660,7 @@ function drawPredict(){
   $("#labPredict").innerHTML=h;
   $("#labPredict").querySelectorAll("button[data-g]").forEach(function(b){b.onclick=function(){
     var r=act({type:"labPredict",runId:lab.runId,choice:+b.dataset.g});
-    if(!r.ok) return;
+    if(labGone(r)||!r.ok) return;
     $("#labBody").hidden=false; $("#labTask").hidden=false;
     drawPredict(); drawTasks(); drawNav();
     if(LABS[lab.key]&&LABS[lab.key].after) LABS[lab.key].after();
@@ -2671,19 +2674,21 @@ function drawTasks(){
 function check(i){
   if(!lab) return;
   var rr=run();
-  if(!rr||rr.phase==="predict"||rr.tasksDone.indexOf(i)>=0) return;
+  if(!rr){stopAnim();renderHome();return;}   // 記憶體裡已沒有這次例題（切回頁面時已讀到被清掉的存檔）
+  if(rr.phase==="predict"||rr.tasksDone.indexOf(i)>=0) return;
   var r=act({type:"labTask",runId:lab.runId,task:i});
+  if(labGone(r)) return;
   if(r.ok){drawTasks();drawNav();if(run().tasksDone.length>=run().tasks)drawPredict();}
 }
 function drawNav(){
   var rr=run(), all=rr.prediction!==null&&rr.tasksDone.length>=rr.tasks, nav=$("#labNav");
   if(lab.ctx.from==="wrong"){
     nav.innerHTML='<button class="btn" type="button" id="labDone"'+(all?'':' disabled')+'>'+(all?'我看懂了，換一題確認':(rr.prediction===null?'先猜猜看，再完成任務':'完成任務後就能換一題確認'))+'</button><button class="btn ghost sm" type="button" id="labSkip">先回到練習</button>';
-    on("#labDone",function(){stopAnim();var r=act({type:"labComplete",runId:lab.runId});if(!r.ok&&!r.dup)return;lab=null;screen="practice";route();});
+    on("#labDone",function(){stopAnim();var r=act({type:"labComplete",runId:lab.runId});if(labGone(r))return;if(!r.ok&&!r.dup)return;lab=null;screen="practice";route();});
     on("#labSkip",function(){stopAnim();lab=null;screen="practice";route();});
   }else{
     nav.innerHTML='<button class="btn" type="button" id="labDone"'+(all?'':' disabled')+'>'+(all?'完成了':'每一步都看過後按這裡')+'</button><button class="btn ghost sm" type="button" id="labHome">回首頁</button>';
-    on("#labDone",function(){stopAnim();var r=act({type:"labComplete",runId:lab.runId});if(!r.ok&&!r.dup)return;lab=null;
+    on("#labDone",function(){stopAnim();var r=act({type:"labComplete",runId:lab.runId});if(labGone(r))return;if(!r.ok&&!r.dup)return;lab=null;
       $("#main").innerHTML='<div class="done"><b class="t">算完了</b><p class="muted" style="margin:0">跟著算完一題，再回去練卡片或考考爸媽。</p><div class="row" style="justify-content:center"><button class="btn ghost" type="button" id="back3">回首頁</button></div></div>';on("#back3",renderHome);renderSide();});
     on("#labHome",function(){stopAnim();lab=null;renderHome();});
   }
@@ -2698,7 +2703,7 @@ LABS.math=function(box){
     $("#mSteps").innerHTML=ex.lines.slice(0,shown).map(function(t,i){return '<li class="step" style="grid-template-columns:1fr"><div class="say"><b class="n">'+(i+1)+'</b><p>'+esc(t)+'</p></div></li>';}).join("");
     $("#mNext").hidden=shown>=ex.lines.length;
   }
-  on("#mNext",function(){if(shown<ex.lines.length){check(shown);shown++;draw();}});
+  on("#mNext",function(){if(shown<ex.lines.length){check(shown);if(!lab)return;shown++;draw();}});   // check 回首頁後 lab＝null，這個畫面已不在
   draw();
 };
 
