@@ -41,6 +41,8 @@ const isNum = (x) => typeof x === "number" && Number.isFinite(x);
 //   沒影片就要寫理由，理由去掉空白後至少 20 字。
 function videoProblems(videos, noVideoReason, opt) {
   const endNullable = !!(opt && opt.endNullable);
+  // Codex 審 g5-help f53bd540：videos={length:1}、"abc" 這類非陣列被當成「沒有影片」放行，畫面 VIDS.map 卻直接拋錯 ⇒ 有寫 videos 就必須是陣列
+  if (videos != null && !Array.isArray(videos)) return ["videos 不是陣列（" + Object.prototype.toString.call(videos).slice(8, -1) + "）：畫面會拋錯或什麼都不顯示"];
   if (!Array.isArray(videos) || !videos.length) {
     // 2026-10-14 律師：「為何漏附影片……請日後避免再犯」——國語站 8 個新觀念我只寫一句理由就沒放影片，測試照放行。
     // ⇒ 沒有影片只認律師核可：{ reason: 理由（去空白 ≥20 字）, ownerApproved: "YYYY-MM-DD 律師原話：「…」" }；只寫理由字串一律不過，去找影片
@@ -95,11 +97,17 @@ function figOk(html) {
 // ③句長：先依 <br>、換行、句號／驚嘆號／問號切句，切完才去 HTML（先去 HTML 會把 <br> 兩邊黏成一句）。
 // 依本站實際怎麼放進畫面：RENDER.escaped＝文字先 esc() 才放進畫面（自然站、數學站），<br> 會變成字面、換行也不換行
 // ⇒ 只有。！？是句界、標籤字元照算長度（Codex 審 4b559c4：自然站 esc(s.say)，舊判準卻把 <br> 當句界）。
+// 沒 esc 的站（難題站）字元參照由瀏覽器解碼：Codex 審 g5-help f53bd540——舊判準把 &#23383; 刪成空字串，41 個「字」量成 0 字放行
+// ⇒ 數字參照（十進位、十六進位）解成那個字，具名參照（&amp; &nbsp; …）各算 1 個字，最後才量長度。
+const decodeRefs = (x) => x.replace(/&#(\d+);|&#x([0-9a-f]+);|&[a-z][a-z0-9]*;/gi, (all, d, h) => {
+  const cp = d !== undefined ? parseInt(d, 10) : h !== undefined ? parseInt(h, 16) : NaN;
+  return Number.isFinite(cp) ? (cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : "\ufffd") : "＊";
+});
 function sentences(t) {
   const s = String(t == null ? "" : t);
   if (RENDER.escaped) return s.split(/[。！？]/).map((x) => x.trim()).filter(Boolean);
   return s.split(/<br\s*\/?>|\n|[。！？]/i)
-    .map((x) => x.replace(/<[^>]*>/g, "").replace(/&[a-z]+;|&#\d+;/gi, "").trim()).filter(Boolean);
+    .map((x) => decodeRefs(x.replace(/<[^>]*>/g, "")).trim()).filter(Boolean);
 }
 const tooLong = (t) => sentences(t).filter((s) => s.length > MAX_SENTENCE);
 // ④切換列【輔助；主閘＝e2e 的 flow_standard_dom】：只看 id="siteNav" 元素裡面（HTML 註解不算）：恰好兩個 <a>、href 恰為另外兩站，本站項目帶 aria-current="page" 且字是本站名。
@@ -163,6 +171,8 @@ test("標準①-自檢：沒有影片時，只寫理由字串不過、缺律師�
   assert.ok(videoProblems([], { reason: why }).length > 0, "缺律師原話卻放行");
   assert.ok(videoProblems([], { reason: why, ownerApproved: "律師說可以" }).length > 0, "核可沒有日期與原話卻放行");
   assert.deepEqual(videoProblems([], { reason: why, ownerApproved: "2026-10-14 律師原話：「這個觀念不用放影片」" }), []);
+  // Codex 審 g5-help f53bd540（三站同型）：videos 不是陣列，就算附律師核可也不可當成「沒有影片」放行
+  for (const v of [{ length: 1 }, "abc"]) assert.ok(videoProblems(v, { reason: why, ownerApproved: "2026-10-14 律師原話：「這個觀念不用放影片」" }).length > 0, "非陣列 videos 卻放行：" + JSON.stringify(v));
 });
 
 test("標準②圖：每個觀念的每一種說法都有圖", () => {
