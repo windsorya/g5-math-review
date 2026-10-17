@@ -547,6 +547,18 @@ def flow_lab_after_external_clear(browser):
         check(f"跟著算一題中存檔被別處清掉後{name}：回到首頁、沒有 JS 錯誤",
               not errors and pg.locator("#labNav").count() == 0 and pg.locator("#goAll").count() == 1, errors or pg.inner_text("#main")[:120])
         ctx.close()
+    # 社會站 Codex 審 e195ef98 第 3 項後半（#1542，四站同型 #2231）：下一步存檔失敗（留下待存）→ 恢復 → 存檔被別處清掉 → 按「再存一次」。
+    # 舊版核心回 NO_RUN 但留著待存、狀態仍 failed：按了沒反應、提示列一直在。應該：回首頁、提示列消失。
+    ctx, pg, errors = open_page(browser, {"viewport": {"width": 390, "height": 844}})
+    open_lab(pg); mid(pg)
+    pg.evaluate("window.__realSet = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new DOMException('QuotaExceededError', 'QuotaExceededError'); }; 0")
+    pg.locator("#mNext").click(); pg.evaluate("Storage.prototype.setItem = window.__realSet; 0")
+    had_retry = pg.locator("#retrySave").count() == 1
+    pg.evaluate(bg); pg.locator("#retrySave").click()
+    check("跟著算一題存檔失敗待重試中、存檔又被別處清掉後按「再存一次」：回到首頁、提示列消失、沒有 JS 錯誤",
+          had_retry and not errors and pg.locator("#labNav").count() == 0 and pg.locator("#goAll").count() == 1 and pg.locator("#retrySave").count() == 0,
+          {"先出現再存一次": had_retry, "errors": errors, "main": pg.inner_text("#main")[:80], "再存一次": pg.locator("#retrySave").count()})
+    ctx.close()
 
 
 def flow_review(browser):
