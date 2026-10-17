@@ -732,7 +732,9 @@ function submit(c,ok,m,selfGraded){
 // 兩個「再存一次」（上方提示列、題目下方）走同一條路：存成功才公布回饋
 function retrySave(){
   var rr=store.retry(); banners();
-  if(screen==="lab"&&labGone(rr)) return;   // 待存的是這一輪的一步、這一輪卻已被別處刪掉：照磁碟現況回首頁（同社會站 #1542，四站同型 #2231）
+  // 待存的是這一輪的一步、這一輪卻已被別處刪掉：照磁碟現況回首頁（同社會站 #1542，四站同型 #2231）。
+  // 要學習頁真的開著（lab 不是 null）：openLab 在 labStart 成功前就把 screen 設成 "lab"，開不成時人還在原畫面（Codex 審 baf22229 第 2 項，#2633）
+  if(screen==="lab"&&lab&&labGone(rr)) return;
   var f=$("#saveFail");
   if(f&&pending){ if(store.accepted(pending.a.id)){f.remove();feedback(pending,(rr&&rr.info)||{});} return; }
   if(rr.ok) route();
