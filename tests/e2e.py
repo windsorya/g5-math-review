@@ -97,7 +97,8 @@ STD_FIG_JS = """(sel) => {
         bb.x + bb.width >= vb.x + vb.width * 0.98 && bb.y + bb.height >= vb.y + vb.height * 0.98) return '';
     const fillOn = !noPaint(cs.fill) && num(cs.fillOpacity) > 0, strokeOn = !noPaint(cs.stroke) && num(cs.strokeWidth) > 0 && num(cs.strokeOpacity) > 0;
     if (tag === 'text') return (el.textContent || '').trim() && bb.width > 0 && bb.height > 0 && (fillOn || strokeOn) ? 'text' : '';
-    if (tag === 'image' || tag === 'use') return bb.width > 0 && bb.height > 0 ? tag : '';
+    // <image>／<use> 不算：量得到寬高，量不到它真的畫了什麼——<use href="#r" fill="none" stroke="none"> 什麼都沒畫也有寬高
+    // （Codex 審 g5-help 5d3cf6f2），<image> 圖檔讀不到也一樣。三站內容 0 處用到（2026-10-18 實查），畫圖一律用基本圖形或 <text>。
     if (!GEO.has(tag) || (AREA.has(tag) && !(bb.width > 0 && bb.height > 0))) return '';
     if (strokeOn && typeof el.getTotalLength === 'function' && el.getTotalLength() > 0) return tag + '描邊';
     if (fillOn && tag !== 'line' && bb.width > 0 && bb.height > 0)
@@ -167,6 +168,8 @@ STD_FIG_CASES = [
     ("畫在圖框外", '<rect x="-5000" y="-5000" width="50" height="50" fill="black"/>', False),
     ("只有填色的斜直線（沒有面積）", '<path d="M10 10 L60 60" fill="black"/>', False),
     ("transform=scale(0)", '<rect x="10" y="10" width="50" height="50" fill="black" transform="scale(0)"/>', False),
+    ("<use> 參照的圖形沒填色也沒描邊", '<defs><rect id="stdUseR" x="10" y="10" width="40" height="30"/></defs><use href="#stdUseR" fill="none" stroke="none"/>', False),
+    ("<image> 圖檔讀不到", '<image href="data:image/png;base64,AAAA" x="10" y="10" width="40" height="30"/>', False),
     ('合法線段 <line x1="50" y1="50" x2="0" y2="50">', '<line x1="50" y1="50" x2="0" y2="50" stroke="black" stroke-width="4"/>', True),
     ("合法小方塊", '<rect x="10" y="10" width="40" height="30" fill="black"/>', True),
     ("合法圓", '<circle cx="50" cy="50" r="10" fill="black"/>', True),
