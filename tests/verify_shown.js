@@ -88,6 +88,10 @@ function chkSafe(v) {
 }
 // 序列化集中處理：BigInt 在安全範圍內輸出數字，超過就輸出字串（不失真）
 const bigToNum = (k, v) => (typeof v === "bigint" ? (inSafe(v) ? Number(v) : String(v)) : v);
+// 2026-10-18 考古卷新題型用：中文十位（二～九）→ 數值；「a°、b°、c°」→ 三個整數
+const tensOf = (ch) => { const i = "二三四五六七八九".indexOf(ch); if (i < 0) throw new Bad("BAD_DATA", "十位不認得：" + ch); return mul(10, add(i, 2)); };
+const degList = (o) => { const t = o.split("、").map((s) => { const x = /^(\d+)°$/.exec(s); if (!x) throw new Bad("OPT_PARSE"); return int(x[1]); });
+  if (t.length !== 3 || t.some((x) => !x)) throw new Bad("OPT_PARSE"); return t; };
 /* ===== 數值入口結束 ===== */
 
 const ncmp = cmp;
@@ -211,6 +215,19 @@ const RULES = [
   { kind: "allcommon", match: (q) => { const m = /^下面哪一組是 (\d+) 和 (\d+) 的全部公因數？$/.exec(q); return m && { kind: "allcommon", a: int(m[1]), b: int(m[2]) }; },
     judgeAll: (p) => { if (!p.a || !p.b) throw new Bad("BAD_DATA"); const f = divisorList(gcd(p.a, p.b));
       return { solution: f.join("、"), judge: (o) => same(sortedNums(intList(o)), f) }; } },
+  // 2026-10-18 考古卷題型（三份彰化 113 南一卷）：平分全部分完的所有可能＝全部因數；範圍內唯一的倍數；三角形三個角不可能的一組
+  { kind: "sharefactors", match: (q) => { const m = /^把 (\d+) (顆|個|枝|張)(\S+?)分裝成若干包，每包一樣多，全部分完，每包可能裝幾(顆|個|枝|張)？下面哪一組是全部可能的答案？$/.exec(q);
+      if (!m) return null; if (m[2] !== m[4]) throw new Bad("BAD_DATA", "單位前後不同"); return { kind: "sharefactors", n: int(m[1]) }; },
+    judgeAll: (p) => { if (!p.n) throw new Bad("BAD_DATA"); const f = divisorList(p.n); return { solution: f.join("、"), judge: (o) => same(sortedNums(intList(o)), f) }; } },
+  { kind: "rangemultiple", match: (q) => {
+      const m = /^.+有([二三四五六七八九])十幾(顆|毫升|個|枝|張)，每 (\d+) \2(?:裝成|倒成) 1 (?:袋|杯|盒)，剛好(?:裝|倒)完。.+有幾\2？$/.exec(q); if (!m) return null;
+      const lo = tensOf(m[1]), d = int(m[3]); if (!d) throw new Bad("BAD_DATA");
+      const hit = []; for (let x = add(lo, 1); cmp(x, add(lo, 9)) <= 0; x = add(x, 1)) if (mod(x, d) === 0) hit.push(x);
+      if (hit.length !== 1) throw new Bad("BAD_DATA", "範圍裡的倍數不是剛好一個"); return { kind: "rangemultiple", lo, d, unit: m[2], ans: hit[0] }; },
+    judgeAll: (p) => ({ solution: String(p.ans), judge: (o) => int(withUnit(o, p.unit)) === p.ans }) },
+  { kind: "trinot", match: (q) => q === "三角形的 3 個角，不可能是下面哪一組？" ? { kind: "trinot" } : null,
+    judge: (p, o) => { const t = degList(o);
+      return sum(t) !== 180; } },
   // 「a ÷ b ＝ c」先驗算式成立（不成立就拒絕整題），再逐句判「x 是 y 的因數／倍數」
   { kind: "relation", match: (q) => { const m = /^(\d+) ÷ (\d+) ＝ (\d+)，下面哪一句是對的？$/.exec(q); if (!m) return null;
       const a = int(m[1]), b = int(m[2]), c = int(m[3]);
@@ -432,6 +449,10 @@ function chkAgreesRaw(c, an) {
     case "maxfrac": return p.kind === "maxfrac" && p.ask === "max" && same(c.opts.slice().sort(), k.fs.map((f) => f[0] + "/" + f[1]).sort());
     case "allfactors": return p.kind === "allfactors" && p.n === k.n;
     case "allcommon": return p.kind === "allcommon" && p.a === k.a && p.b === k.b;
+    case "sharefactors": return p.kind === "sharefactors" && p.n === k.n;
+    case "rangemultiple": return p.kind === "rangemultiple" && p.lo === tensOf(String(k.tens).replace(/十$/, "")) && p.d === k.d && p.unit === k.unit;
+    case "trinot": { let sets; try { sets = c.opts.map((o) => degList(o).join(",")).sort(); } catch (e) { return false; }
+      return p.kind === "trinot" && same(sets, k.sets.map((t) => t.join(",")).sort()); }
     case "relation": return p.kind === "relation" && p.a === k.a && p.b === k.b;
     case "mixexpand": return p.kind === "mixexpand" && p.w === k.w && p.n === k.n && p.d === k.d && p.m === k.m;
     case "allequiv": return p.kind === "allequiv" && p.n === k.n && p.d === k.d;

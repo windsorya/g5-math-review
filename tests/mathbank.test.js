@@ -88,6 +88,13 @@ function expected(c) {
     case "allfactors": case "allcommon": { const want = divs(k.k === "allfactors" ? k.n : G(k.a, k.b)).join("、");
       const asSet = (o) => o.split("、").map(Number).sort((x, y) => x - y).join("、");
       return R === want && c.opts.filter((o, i) => i !== c.a).every((o) => asSet(o) !== want); }
+    case "sharefactors": { const want = divs(k.n).join("、"), asSet = (o) => o.split("、").map(Number).sort((x, y) => x - y).join("、");
+      return R === want && c.opts.filter((o, i) => i !== c.a).every((o) => asSet(o) !== want); }
+    case "rangemultiple": { const lo = 10 * (["二", "三", "四", "五", "六", "七", "八", "九"].indexOf(k.tens.replace(/十$/, "")) + 2), hit = []; for (let x = lo + 1; x <= lo + 9; x++) if (x % k.d === 0) hit.push(x);
+      const ok = (o) => { const v = num(o); return hit.length === 1 && v === hit[0]; };
+      return ok(R) && c.opts.filter((o, i) => i !== c.a).every((o) => !ok(o)); }
+    case "trinot": { const bad = (o) => o.split("、").map((x) => parseInt(x, 10)).reduce((a, b) => a + b, 0) !== 180;
+      return bad(R) && c.opts.filter((o, i) => i !== c.a).every((o) => !bad(o)); }
     case "relation": { const q = /^(\d+) ÷ (\d+) ＝ (\d+)，/.exec(c.q), ok = (o) => { const m = /^(\d+) 是 (\d+) 的(因數|倍數)$/.exec(o); return !!m && (m[3] === "因數" ? +m[2] % +m[1] === 0 : +m[1] % +m[2] === 0); };
       return !!q && +q[1] === k.a && +q[2] === k.b && k.a % k.b === 0 && +q[3] === k.a / k.b && ok(R) && c.opts.filter((o, i) => i !== c.a).every((o) => !ok(o)); }
     case "mixexpand": { const v = k.n * k.m / k.d; return Number.isInteger(v) && num(R) === v && c.opts.filter((o, i) => i !== c.a).every((o) => num(o) !== v); }
@@ -205,8 +212,8 @@ test("突變自檢：把題庫改錯，獨立驗算一定要抓到（在記憶�
 });
 
 test("每種題型最多 2 題（2026-10-18）：出題的卡＝產生的卡依題型截取，觀念與題型種類都沒少", () => {
-  assert.equal(B.ALL_GENERATED.length, 184);
-  assert.equal(B.CARDS.length, 105);
+  assert.equal(B.ALL_GENERATED.length, 192);
+  assert.equal(B.CARDS.length, 113);
   const n = {}; B.CARDS.forEach((c) => { const f = B.family(c); n[f] = (n[f] || 0) + 1; });
   const over = Object.keys(n).filter((f) => n[f] > B.FAMILY_MAX);
   assert.deepEqual(over, []);

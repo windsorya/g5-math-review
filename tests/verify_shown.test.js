@@ -67,12 +67,26 @@ const K = [
   { n: "K29", k: "mixexpand", id: "e0mix", from: "□/12", to: "□/16", correct: [], reason: "NO_CORRECT",
     more: (a) => assert.equal(a.solution, "12") },
   { n: "K30", k: "allequiv", id: "q0all", from: "和 3/4", to: "和 5/6", correct: [], reason: "NO_CORRECT" },
-  { n: "K31", k: "mixcompare", id: "c0mix", from: "15/7", to: "13/6", correct: ["="], reason: "WRONG_KEY" }
+  { n: "K31", k: "mixcompare", id: "c0mix", from: "15/7", to: "13/6", correct: ["="], reason: "WRONG_KEY" },
+  // K32–K34：2026-10-18 依彰化 113 南一三份考古卷補的題型（平分的所有可能、範圍內的倍數、三角形三個角不可能）
+  { n: "K32", k: "sharefactors", id: "f0sh", from: "把 30 顆", to: "把 32 顆", correct: [], reason: "NO_CORRECT",
+    more: (a) => assert.equal(a.solution, "1、2、4、8、16、32") },
+  { n: "K33", k: "rangemultiple", id: "m0rg", from: "七十幾顆", to: "八十幾顆", correct: [], reason: "NO_CORRECT",
+    more: (a) => assert.equal(a.solution, "88") },
+  { n: "K34", k: "trinot", id: "a0no", from: "不可能是", to: "可能是", correct: [], reason: "UNKNOWN_PATTERN" }
 ];
+test("K34-b trinot 語意：把一組合法的角改成加起來不是 180 ⇒ 兩個正解被拒；範圍裡有兩個倍數 ⇒ 拒絕整題", () => {
+  const c = card("a0no"), good = c.opts.find((o, i) => i !== c.a);
+  const t = editOpt(clone(c), good, good.replace(/^(\d+)°/, (_, d) => (+d + 5) + "°"));
+  assert.equal(V.analyzeShown(shown(t)).correctIndices.length, 2);
+  assertRejected(t, "MULTI_CORRECT");
+  const m = editQ(card("m1rg"), "每 9 毫升", "每 3 毫升");
+  assertRejected(m, "BAD_DATA");
+});
 
-test("K 矩陣涵蓋題庫全部 31 種 chk.k", () => {
+test("K 矩陣涵蓋題庫全部 34 種 chk.k", () => {
   const kinds = [...new Set(B.CARDS.map((c) => c.chk.k))].sort();
-  assert.equal(kinds.length, 31);
+  assert.equal(kinds.length, 34);
   assert.deepEqual([...new Set(K.map((r) => r.k))].sort(), kinds);
   K.forEach((r) => assert.equal(card(r.id).chk.k, r.k, r.n + " 前置卡的 k"));
 });
@@ -99,10 +113,10 @@ K.forEach((r) => {
 });
 
 /* ---------- A01–A16 ---------- */
-test("A01 覆蓋：產生的 184 張（出題 105 張）逐卡驗算，31 種 k 全部辨識，無跳過、無未知句型、無預設通過", () => {
-  assert.equal(B.ALL_GENERATED.length, 184);
-  assert.equal(B.CARDS.length, 105);
-  assert.equal(new Set(B.CARDS.map((c) => c.chk.k)).size, 31, "出題的卡也要 31 種 k 都有");
+test("A01 覆蓋：產生的 192 張（出題 113 張）逐卡驗算，34 種 k 全部辨識，無跳過、無未知句型、無預設通過", () => {
+  assert.equal(B.ALL_GENERATED.length, 192);
+  assert.equal(B.CARDS.length, 113);
+  assert.equal(new Set(B.CARDS.map((c) => c.chk.k)).size, 34, "出題的卡也要 34 種 k 都有");
   const bad = [], kinds = new Set();
   B.ALL_GENERATED.forEach((c) => {
     const r = V.verifyCard(clone(c));
@@ -111,7 +125,7 @@ test("A01 覆蓋：產生的 184 張（出題 105 張）逐卡驗算，31 種 k 
         r.analysis.truth.some((t) => typeof t !== "boolean")) bad.push(c.id + "：" + (r.issues.join(",") || "沒有逐項真假"));
   });
   assert.deepEqual(bad, []);
-  assert.equal(kinds.size, 31);
+  assert.equal(kinds.size, 34);
 });
 
 const checkA02 = (VV) => {
