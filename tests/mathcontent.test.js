@@ -216,24 +216,43 @@ test("⑦-b 自檢：「長方形的對角線是不是對稱軸？」要抓到",
 
 // ⑧ 全部因數題（2026-10-18 新題型；Codex 審 ad46572）：「兩個數碰在一起就停」只對平方數成立（64：8×8），
 //    40 是 5×8 之後變 8×5、永遠不相等 ⇒ 停止條件必須對每一個數都成立；解說列的成對也要和獨立算出來的一樣
+// Codex 複審 089fd23：只比關鍵字會放過「右邊的數超過左邊的數就停」（1×40 就停）⇒ 改成兩段，不靠關鍵字：
+//   (a) 提示必須逐字等於核准句（六題同一句，換任何字都紅）；(b) 測試自己照核准句的規則模擬，證明它對每個數都找得齊成對
+const HINT = (n) => "從 1 開始成對找：1×" + n + "、2×…，左邊的數追上右邊的數就停。";
+// 核准句的規則：左邊 a 從 1 往上，右邊＝n÷a；左邊「追上」右邊（a ≥ n÷a）就停——追上時若剛好相等（平方數），那一對也算
+function pairsByApprovedRule(n) {
+  const out = [];
+  for (let a = 1; ; a++) {
+    if (n % a) { if (a * a >= n) break; continue; }
+    const b = n / a;
+    if (a > b) break;   // 平方數在 a＝b 那一對收進來後，下一個因數一定 a＞b，在這裡停
+    out.push(a + "×" + b);
+  }
+  return out;
+}
 function factorHintBad(c) {
   const n = c.chk.n, pairs = [];
-  for (let a = 1; a * a <= n; a++) if (n % a === 0) pairs.push(a + "×" + n / a);
+  for (let a = 1; a <= n; a++) if (n % a === 0 && a <= n / a) pairs.push(a + "×" + n / a);   // 獨立算：所有 a≤b 的成對
   const bad = [];
   if (!String(c.why).includes("成對找：" + pairs.join("、") + "。")) bad.push(c.id + "：解說的成對不是 " + pairs.join("、"));
-  const square = Number.isInteger(Math.sqrt(n));
-  if (/碰在一起|一樣大就停|相等就停/.test(c.hint) && !square) bad.push(c.id + "：停止條件只對平方數成立：" + c.hint);
-  if (!/追上|超過|不比.*小/.test(c.hint)) bad.push(c.id + "：提示沒寫什麼時候停：" + c.hint);
+  if (c.hint !== HINT(n)) bad.push(c.id + "：提示不是核准句：" + c.hint);
+  if (pairsByApprovedRule(n).join("、") !== pairs.join("、")) bad.push(c.id + "：照核准句的規則找不齊：" + pairsByApprovedRule(n).join("、"));
   return bad;
 }
-test("⑧全部因數題：提示的停止條件對每個數都成立、解說的成對正確", () => {
+test("⑧全部因數題：提示＝核准句、照核准句的規則找得齊成對、解說的成對正確", () => {
   const cards = B.CARDS.filter((c) => c.chk.k === "allfactors");
   assert.ok(cards.length >= 6);
   assert.deepEqual(cards.map(factorHintBad).flat(), []);
+  // 核准句的規則本身：平方數與非平方數、質數、1 都要對（不只題庫裡那六個數）
+  [1, 2, 7, 12, 16, 36, 40, 49, 60, 64, 75, 97, 100].forEach((n) => {
+    const all = []; for (let a = 1; a <= n; a++) if (n % a === 0 && a <= n / a) all.push(a + "×" + n / a);
+    assert.equal(pairsByApprovedRule(n).join("、"), all.join("、"), n + " 照規則找不齊");
+  });
 });
-test("⑧-b 自檢：舊提示「兩個數碰在一起就停」放在 40 要抓到；放在 64 不誤判", () => {
-  const base = B.CARDS.find((c) => c.chk.k === "allfactors" && c.chk.n === 40);
-  assert.ok(factorHintBad({ ...base, hint: "從 1 開始成對找：1×40、2×…，兩個數碰在一起就停。" }).length > 0);
-  const sq = B.CARDS.find((c) => c.chk.k === "allfactors" && c.chk.n === 64);
-  assert.deepEqual(factorHintBad({ ...sq, hint: "從 1 開始成對找：1×64、2×…，左邊的數追上右邊的數就停。" }), []);
+test("⑧-b 自檢：改過的提示一律抓到（40、64 都試）；核准句兩個都過", () => {
+  const forN = (n) => B.CARDS.find((c) => c.chk.k === "allfactors" && c.chk.n === n);
+  ["兩個數碰在一起就停。", "右邊的數超過左邊的數就停。", "找到一個就停。"].forEach((tail) => [40, 64].forEach((n) => {
+    assert.ok(factorHintBad({ ...forN(n), hint: "從 1 開始成對找：1×" + n + "、2×…，" + tail }).length > 0, n + "：" + tail);
+  }));
+  [40, 64].forEach((n) => assert.deepEqual(factorHintBad({ ...forN(n), hint: HINT(n) }), [], n + " 核准句"));
 });
