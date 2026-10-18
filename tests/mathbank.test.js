@@ -84,6 +84,16 @@ function expected(c) {
     case "maxfrac": { let m = k.fs[0]; k.fs.forEach((f) => { if (f[0] * m[1] > m[0] * f[1]) m = f; }); return eqf(frac(R), m); }
     case "addsub": { const n = k.op === "+" ? k.a * k.d + k.c * k.b : k.a * k.d - k.c * k.b, d = k.b * k.d, f = frac(R);
       return eqf(f, [n, d]) && lowest(f) && c.opts.filter((o, i) => i !== c.a).every((o) => !eqf(frac(o), [n, d])); }
+    // 2026-10-18 考古卷題型：選項是一組數或一組分數（用「、」分開）；錯誤選項比的是集合，不看順序
+    case "allfactors": case "allcommon": { const want = divs(k.k === "allfactors" ? k.n : G(k.a, k.b)).join("、");
+      const asSet = (o) => o.split("、").map(Number).sort((x, y) => x - y).join("、");
+      return R === want && c.opts.filter((o, i) => i !== c.a).every((o) => asSet(o) !== want); }
+    case "relation": { const q = /^(\d+) ÷ (\d+) ＝ (\d+)，/.exec(c.q), ok = (o) => { const m = /^(\d+) 是 (\d+) 的(因數|倍數)$/.exec(o); return !!m && (m[3] === "因數" ? +m[2] % +m[1] === 0 : +m[1] % +m[2] === 0); };
+      return !!q && +q[1] === k.a && +q[2] === k.b && k.a % k.b === 0 && +q[3] === k.a / k.b && ok(R) && c.opts.filter((o, i) => i !== c.a).every((o) => !ok(o)); }
+    case "mixexpand": { const v = k.n * k.m / k.d; return Number.isInteger(v) && num(R) === v && c.opts.filter((o, i) => i !== c.a).every((o) => num(o) !== v); }
+    case "mixcompare": { const x = (k.w * k.d + k.n) * k.e, y = k.c * k.d; return R === (x > y ? ">" : x < y ? "<" : "="); }
+    case "allequiv": { const ok = (o) => o.split("、").every((s) => { const f = frac(s); return !!f && eqf(f, [k.n, k.d]); });
+      return ok(R) && c.opts.filter((o, i) => i !== c.a).every((o) => !ok(o)); }
     case "axes": { const P = shapeOf(k.shape); return !!P && num(R) === axesCount(P) && c.opts.every((o, i) => i === c.a || num(o) !== axesCount(P)); }
     case "fact": {
       const m = /^是非題：「(.+)是正多邊形。」$/.exec(c.q);
@@ -181,6 +191,11 @@ test("突變自檢：把題庫改錯，獨立驗算一定要抓到（在記憶�
   const up = clone(B.CARDS.find((c) => c.chk.k === "maxrise")); up.chk.v = [0, 4, 8, 9, 10];
   up.opts = ["第 2 天 到 第 4 天", "第 4 天 到 第 6 天"].map((x) => x.replace(/第 (\d+) 天/g, (_, d) => up.chk.lab[+d / 2 - 1])); up.a = 0;
   assert.equal(expected(up), false, "兩段並列最多時不得只認第一段");
+  // 2026-10-18 新題型：正解那個選項本身被改錯（四個選項都不是全部因數／公因數）也要紅——上面的換位突變測不到這種
+  const fa = clone(B.CARDS.find((c) => c.chk.k === "allfactors")); fa.opts[fa.a] = fa.opts[fa.a].replace(/、\d+$/, "");
+  assert.equal(expected(fa), false, "正解少掉最後一個因數必須紅");
+  const fc = clone(B.CARDS.find((c) => c.chk.k === "allcommon")); fc.opts[fc.a] = fc.opts[fc.a].replace(/^1、/, "");
+  assert.equal(expected(fc), false, "正解少掉 1 必須紅");
   // 對稱軸：等腰三角形不排除正三角形 ⇒ 必須紅
   const s = clone(B.CARDS.find((c) => c.chk.k === "axes" && /等腰/.test(c.chk.shape))); s.chk.shape = "等腰三角形（兩腰一樣長）";
   assert.equal(expected(s), false);

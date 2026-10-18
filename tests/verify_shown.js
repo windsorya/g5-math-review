@@ -59,6 +59,13 @@ function countDivisors(n) {
   for (let i = 1; i <= r; i += 1) if (v % i === 0) c += v / i === i ? 1 : 2;   // 成對的因數 i 與 n÷i
   return c;
 }
+// 全部因數由小到大（「寫出全部因數／公因數」題用）：和 countDivisors 一樣只試到 ⌊√n⌋，成對收
+function divisorList(n) {
+  const v = num(big(n)); if (v < 1) throw new Bad("BAD_DATA");
+  const r = isqrt(v), lo = [], hi = [];
+  for (let i = 1; i <= r; i += 1) if (v % i === 0) { lo.push(i); if (v / i !== i) hi.unshift(v / i); }
+  return lo.concat(hi);
+}
 const Q = (n, d) => { n = big(n); d = big(d); if (d === 0n) throw new Bad("BAD_DATA"); if (d < 0n) { n = -n; d = -d; } const g = GB(n, d) || 1n; return [n / g, d / g]; };
 const qadd = (x, y) => Q(x[0] * y[1] + y[0] * x[1], x[1] * y[1]);
 const qsub = (x, y) => Q(x[0] * y[1] - y[0] * x[1], x[1] * y[1]);
@@ -198,6 +205,18 @@ const RULES = [
       return { solution: String(g), judge: (o) => int(withUnit(o, p.unit)) === g }; } },
   { kind: "iscommonfactor", match: (q) => { const m = /^下面哪一個(不?是) (\d+) 和 (\d+) 的公因數？$/.exec(q); return m && { kind: "iscommonfactor", a: int(m[2]), b: int(m[3]), neg: m[1] === "不是" }; },
     judge: (p, o) => { const x = int(o); if (!x || !p.a || !p.b) throw new Bad("BAD_DATA"); return (mod(p.a, x) === 0 && mod(p.b, x) === 0) !== p.neg; } },
+  // 2026-10-18 考古卷題型：選項是「、」分開的一組數，和全部因數（公因數）比集合，不看順序
+  { kind: "allfactors", match: (q) => { const m = /^下面哪一組是 (\d+) 的全部因數？$/.exec(q); return m && { kind: "allfactors", n: int(m[1]) }; },
+    judgeAll: (p) => { const f = divisorList(p.n); return { solution: f.join("、"), judge: (o) => same(sortedNums(intList(o)), f) }; } },
+  { kind: "allcommon", match: (q) => { const m = /^下面哪一組是 (\d+) 和 (\d+) 的全部公因數？$/.exec(q); return m && { kind: "allcommon", a: int(m[1]), b: int(m[2]) }; },
+    judgeAll: (p) => { if (!p.a || !p.b) throw new Bad("BAD_DATA"); const f = divisorList(gcd(p.a, p.b));
+      return { solution: f.join("、"), judge: (o) => same(sortedNums(intList(o)), f) }; } },
+  // 「a ÷ b ＝ c」先驗算式成立（不成立就拒絕整題），再逐句判「x 是 y 的因數／倍數」
+  { kind: "relation", match: (q) => { const m = /^(\d+) ÷ (\d+) ＝ (\d+)，下面哪一句是對的？$/.exec(q); if (!m) return null;
+      const a = int(m[1]), b = int(m[2]), c = int(m[3]);
+      if (!b || mod(a, b) !== 0 || div(a, b) !== c) throw new Bad("BAD_DATA", "算式不成立"); return { kind: "relation", a, b, c }; },
+    judge: (p, o) => { const m = /^(\d+) 是 (\d+) 的(因數|倍數)$/.exec(o); if (!m) throw new Bad("OPT_PARSE"); const x = int(m[1]), y = int(m[2]);
+      if (!x || !y) throw new Bad("BAD_DATA"); return m[3] === "因數" ? mod(y, x) === 0 : mod(x, y) === 0; } },
   { kind: "divides", match: (q) => {
     if (q === "下面哪一個算式是「整除」？" || q === "下面哪一個算式是整除？") return { kind: "divides", neg: false };
     if (q === "下面哪一個算式不能整除？" || q === "下面哪一個算式不是「整除」？") return { kind: "divides", neg: true };
@@ -248,6 +267,20 @@ const RULES = [
       const n = int(m[1]), d = int(m[2]), M = int(m[3]); if (!d || !M || mod(M, d)) throw new Bad("BAD_DATA", "分母不能擴成 " + M);
       return { kind: "expand", n, d, m: M, numer: mulDiv(n, M, d) }; },   // n×M÷d 用 BigInt 中間值（R3）
     judgeAll: (p) => ({ solution: String(p.numer), judge: (o) => int(o) === p.numer }) },
+  // 帶分數擴分：兩邊整數部分要一樣、分數部分要是真分數，□＝分子×新分母÷原分母
+  { kind: "mixexpand", match: (q) => { const m = new RegExp("^(\\d+)又" + FRAC_RE + " ＝ (\\d+)又□\\/(\\d+)，□ 是多少？$").exec(q); if (!m) return null;
+      const w = int(m[1]), n = int(m[2]), d = int(m[3]), M = int(m[5]);
+      if (int(m[4]) !== w) throw new Bad("BAD_DATA", "兩邊的整數部分不一樣");
+      if (!n || !d || !M || cmp(n, d) >= 0 || mod(M, d)) throw new Bad("BAD_DATA", "分數部分不是真分數或分母不能擴成 " + M);
+      return { kind: "mixexpand", w, n, d, m: M, numer: mulDiv(n, M, d) }; },
+    judgeAll: (p) => ({ solution: String(p.numer), judge: (o) => int(o) === p.numer }) },
+  { kind: "allequiv", match: (q) => { const m = new RegExp("^下面哪一組分數，全部都和 " + FRAC_RE + " 一樣大？$").exec(q); return m && { kind: "allequiv", n: int(m[1]), d: int(m[2]), v: qfrac(m[1], m[2]) }; },
+    judge: (p, o) => { const vs = o.split("、").map(fracQ); if (vs.length < 2) throw new Bad("OPT_PARSE", "不是一組分數"); return vs.every((v) => qcmp(v, p.v) === 0); } },
+  { kind: "mixcompare", match: (q) => { const m = new RegExp("^(\\d+)又" + FRAC_RE + " ○ " + FRAC_RE + "，○ 裡要填 >、< 還是 =？$").exec(q); if (!m) return null;
+      const w = int(m[1]), n = int(m[2]), d = int(m[3]); if (!n || !d || cmp(n, d) >= 0) throw new Bad("BAD_DATA", "帶分數的分數部分要是真分數");
+      return { kind: "mixcompare", w, n, d, c: int(m[4]), e: int(m[5]), x: qadd(qint(w), qfrac(m[2], m[3])), y: qfrac(m[4], m[5]) }; },
+    judgeAll: (p) => { const c = qcmp(p.x, p.y), s = c > 0 ? ">" : c < 0 ? "<" : "=";
+      return { solution: s, judge: (o) => { if (![">", "<", "="].includes(o)) throw new Bad("OPT_PARSE"); return o === s; } }; } },
   { kind: "simplify", match: (q) => { const m = new RegExp("^把 " + FRAC_RE + " 約成最簡分數。$").exec(q); return m && { kind: "simplify", n: int(m[1]), d: int(m[2]), v: qfrac(m[1], m[2]) }; },
     judgeAll: (p) => ({ solution: qstr(p.v), judge: (o) => { const f = frac(o).raw; return qcmp(Q(f[0], f[1]), p.v) === 0 && qlowest(f); } }) },
   { kind: "equiv", match: (q) => { const m = new RegExp("^下面哪一個分數和 " + FRAC_RE + " 一樣大？$").exec(q); return m && { kind: "equiv", n: int(m[1]), d: int(m[2]), v: qfrac(m[1], m[2]) }; },
@@ -270,6 +303,8 @@ const RULES = [
     const r = p.op === "+" ? qadd(p.X, p.Y) : qsub(p.X, p.Y), issues = r[0] < 0n && p.story ? ["NEGATIVE_RESULT"] : [];
     return { issues, solution: qstr(r), judge: (o) => { const f = frac(withUnit(o, p.unit)).raw; return qcmp(Q(f[0], f[1]), r) === 0 && (!p.lowest || qlowest(f)); } }; } }
 ];
+// 「、」分開的一組整數（每個都走 int() 入口）
+const intList = (o) => o.split("、").map(int);
 // 吸管選項「a 公分、b 公分、c 公分」⇒ 由小到大的三個安全整數；格式不對回 null
 function triSides(o) {
   const m = /^(\d+) 公分、(\d+) 公分、(\d+) 公分$/.exec(o);
@@ -395,6 +430,12 @@ function chkAgreesRaw(c, an) {
     case "equiv": return p.kind === "equiv" && p.n === k.n && p.d === k.d;
     case "compare": return p.kind === "compare" && p.a === k.a && p.b === k.b && p.c === k.c && p.d === k.d;
     case "maxfrac": return p.kind === "maxfrac" && p.ask === "max" && same(c.opts.slice().sort(), k.fs.map((f) => f[0] + "/" + f[1]).sort());
+    case "allfactors": return p.kind === "allfactors" && p.n === k.n;
+    case "allcommon": return p.kind === "allcommon" && p.a === k.a && p.b === k.b;
+    case "relation": return p.kind === "relation" && p.a === k.a && p.b === k.b;
+    case "mixexpand": return p.kind === "mixexpand" && p.w === k.w && p.n === k.n && p.d === k.d && p.m === k.m;
+    case "allequiv": return p.kind === "allequiv" && p.n === k.n && p.d === k.d;
+    case "mixcompare": return p.kind === "mixcompare" && p.w === k.w && p.n === k.n && p.d === k.d && p.c === k.c && p.e === k.e;
     case "axes": return p.kind === "axes" && p.shape === k.shape;
     case "addsub": return p.kind === "addsub" && p.a === k.a && p.b === k.b && p.c === k.c && p.d === k.d && p.op === k.op && p.unit === unit(k.unit);
     default: return false;

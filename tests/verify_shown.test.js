@@ -1,5 +1,5 @@
 // 題庫獨立驗算（主閘）：只看孩子看到的題文與選項，獨立求出每個選項真假，最後才比對 card.a 與 chk。
-// 驗收契約：docs/design-verify-shown-codex-20261013.md（K01–K25 各 -Q／-O、A01–A16；A17 在 tests/e2e.py）。
+// 驗收契約：docs/design-verify-shown-codex-20261013.md（K01–K31 各 -Q／-O、A01–A16；A17 在 tests/e2e.py）。
 // 執行：node --test tests/verify_shown.test.js
 // 可用環境變數 VERIFY_SHOWN=<路徑> 換一個驗算器跑同一份矩陣（突變自檢用）。
 "use strict";
@@ -27,7 +27,7 @@ function assertRejected(c, reason) {
   return r;
 }
 
-/* ---------- K01–K25：每列 -Q（只改題面）與 -O（交換正解與下一個選項、保留 a） ---------- */
+/* ---------- K01–K31：每列 -Q（只改題面）與 -O（交換正解與下一個選項、保留 a） ---------- */
 // correct：獨立求得的正解選項文字（排序後比對）；reason：整卡被拒的必要原因；more：額外斷言解析／求解欄位
 const K = [
   { n: "K01", k: "argmax", id: "g0max", from: "12 時 29 度", to: "12 時 20 度", correct: ["14 時"], reason: "WRONG_KEY" },
@@ -58,12 +58,21 @@ const K = [
   { n: "K23", k: "maxfrac", id: "c0max", from: "最大", to: "最小", correct: ["1/2"], reason: "WRONG_KEY" },
   { n: "K24", k: "axes", id: "s0", from: "正方形", to: "正三角形", correct: ["3 條"], reason: "WRONG_KEY" },
   { n: "K25", k: "addsub", id: "o0", from: "1/2 ＋", to: "1/3 ＋", correct: [], reason: "NO_CORRECT",
-    more: (a) => { assert.equal(a.solution, "2/3"); assert.ok(!a.correctIndices.length); } }
+    more: (a) => { assert.equal(a.solution, "2/3"); assert.ok(!a.correctIndices.length); } },
+  // K26–K31：2026-10-18 依考古卷補的題型（全部因數、全部公因數、因數倍數關係、帶分數擴分、全組等值、帶分數比大小）
+  { n: "K26", k: "allfactors", id: "f0all", from: "64 的全部因數", to: "32 的全部因數", correct: [], reason: "NO_CORRECT",
+    more: (a) => assert.equal(a.solution, "1、2、4、8、16、32") },
+  { n: "K27", k: "allcommon", id: "f0com", from: "20 和 30", to: "20 和 40", correct: ["1、2、4、5、10、20"], reason: "WRONG_KEY" },
+  { n: "K28", k: "relation", id: "f0rel", from: "＝ 14", to: "＝ 15", correct: [], reason: "BAD_DATA" },
+  { n: "K29", k: "mixexpand", id: "e0mix", from: "□/12", to: "□/16", correct: [], reason: "NO_CORRECT",
+    more: (a) => assert.equal(a.solution, "12") },
+  { n: "K30", k: "allequiv", id: "q0all", from: "和 3/4", to: "和 5/6", correct: [], reason: "NO_CORRECT" },
+  { n: "K31", k: "mixcompare", id: "c0mix", from: "15/7", to: "13/6", correct: ["="], reason: "WRONG_KEY" }
 ];
 
-test("K 矩陣涵蓋題庫全部 25 種 chk.k", () => {
+test("K 矩陣涵蓋題庫全部 31 種 chk.k", () => {
   const kinds = [...new Set(B.CARDS.map((c) => c.chk.k))].sort();
-  assert.equal(kinds.length, 25);
+  assert.equal(kinds.length, 31);
   assert.deepEqual([...new Set(K.map((r) => r.k))].sort(), kinds);
   K.forEach((r) => assert.equal(card(r.id).chk.k, r.k, r.n + " 前置卡的 k"));
 });
@@ -90,8 +99,8 @@ K.forEach((r) => {
 });
 
 /* ---------- A01–A16 ---------- */
-test("A01 覆蓋：154 張逐卡驗算，25 種 k 全部辨識，無跳過、無未知句型、無預設通過", () => {
-  assert.equal(B.CARDS.length, 154);
+test("A01 覆蓋：184 張逐卡驗算，31 種 k 全部辨識，無跳過、無未知句型、無預設通過", () => {
+  assert.equal(B.CARDS.length, 184);
   const bad = [], kinds = new Set();
   B.CARDS.forEach((c) => {
     const r = V.verifyCard(clone(c));
@@ -100,7 +109,7 @@ test("A01 覆蓋：154 張逐卡驗算，25 種 k 全部辨識，無跳過、無
         r.analysis.truth.some((t) => typeof t !== "boolean")) bad.push(c.id + "：" + (r.issues.join(",") || "沒有逐項真假"));
   });
   assert.deepEqual(bad, []);
-  assert.equal(kinds.size, 25);
+  assert.equal(kinds.size, 31);
 });
 
 const checkA02 = (VV) => {
@@ -484,4 +493,16 @@ test("大數 最小公倍數：13000000195 和 17000000255 ⇒ 221000003315（Nu
   const r = V.analyzeShown({ q: "13000000195 和 17000000255 的最小公倍數是多少？", opts: ["221000003315", "221000003314"] });
   assert.equal(r.solution, "221000003315");
   assert.deepEqual(r.correctIndices, [0]);
+});
+
+// 2026-10-18 考古卷題型的文法嚴格度：題面本身不成立就整題拒絕，不猜、不放行
+test("新題型文法：帶分數兩邊整數不同、分數部分不是真分數、全組等值只給一個分數、因數題選項有非整數 ⇒ 拒絕", () => {
+  const issues = (q, opts) => V.analyzeShown({ q, opts }).issues;
+  assert.ok(issues("2又3/4 ＝ 3又□/12，□ 是多少？", ["9", "21"]).includes("BAD_DATA"), "兩邊整數部分不同");
+  assert.ok(issues("2又5/4 ＝ 2又□/12，□ 是多少？", ["15", "9"]).includes("BAD_DATA"), "分數部分是假分數");
+  assert.ok(issues("2又7/6 ○ 15/7，○ 裡要填 >、< 還是 =？", [">", "<", "="]).includes("BAD_DATA"), "比大小的帶分數部分是假分數");
+  assert.ok(issues("下面哪一組分數，全部都和 3/4 一樣大？", ["6/8", "6/8、9/12"]).includes("OPT_PARSE"), "只有一個分數不算一組");
+  assert.ok(issues("下面哪一組是 64 的全部因數？", ["1、2、4、8、16、32、64", "1、2、4、8.5"]).includes("OPT_PARSE"), "選項有非整數");
+  const ok = V.analyzeShown({ q: "下面哪一組是 64 的全部因數？", opts: ["64、32、16、8、4、2、1", "1、2、4、8、16、32"] });
+  assert.deepEqual(ok.correctIndices, [0], "集合相同、順序不同仍算對");
 });
