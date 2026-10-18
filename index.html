@@ -791,18 +791,25 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
       "先判斷用加還是減，再通分。", { k: "addsub", a: a, b: b, c: c, d: d, op: op, unit: u }));
   });
 
-  /* ---------- 同一種題型只留 3 題換數字的版本（2026-10-18 律師：「如果數個題目是在測試是否理解同一個觀念，是否有必要出這麼多題目？」） ----------
-   * 題型＝卡片 id 去掉數字（f0g、f1g…→fg）；異分母加減（o）再分加法、減法，免得只留下加法。分數應用題（w）每題是不同生活情境，不刪。
-   * cap-why：用 src/core.js 實際排程模擬 10/13 起天天做完、10/18～11/4（~/scripts/state/autocont/g5math-load-sim5-20261018.js，三個亂數種子平均）：
-   *          答對 8 成：全部 184 張每天平均 37.3 張（最多 46）、考前學會 39／46 種題型；每種最多 3 題（116 張）每天 23.9 張（最多 30）、學會 42／46 種。
-   *          答對 6 成：58.1→37.6 張／天、學會 37→38 種——量少約四成，學會的題型不減反增（每種題型輪得到第 3 次答對）。
+  /* ---------- 同一種題型只留 2 題換數字的版本 ----------
+   * 律師 2026-10-18：「如果數個題目是在測試是否理解同一個觀念，是否有必要出這麼多題目？」；
+   *   重複的判準（同日律師）：「重複是指a題可以答對，也能夠答對b或c題，那b、c題就可能是重複觀念題」。
+   * 同一種題型只換數字＝會算 a 就會算 b ⇒ 重複。仍留 2 題而不是 1 題：同一張卡隔幾天再出，答案會被記住，兩張輪流才看得出是會方法。
+   * 題型＝卡片 id 去掉數字（f0g、f1g…→fg）；異分母加減（o）再分加法、減法；分數應用題（w）分「合起來／剩下／相差」三種情境。
+   * cap-why：src/core.js 實際排程模擬 10/13 起天天做完、量 10/18～11/4（~/scripts/state/autocont/g5math-load-sim5-20261018.js 與同目錄 sim6，三個亂數種子平均）：
+   *          答對 8 成：全部 184 張每天 37.3 張、考前學會 39／46 種題型；每種 3 題 23.5 張、42 種；每種 2 題 17.3 張、45 種；每種 1 題 10.1 張、46 種。
+   *          答對 6 成：全部 58.1 張、37 種；3 題 37.2 張、39 種；2 題 30.4 張、42 種；1 題 19.1 張、38 種（一張卡要連 3 天答對，機會太少）——2 題兩種答對率都學會最多。
    * 被拿掉的變體不會影響她既有進度：core 的 pruneVanished 會略過題庫裡已不存在的卡。 */
-  var FAMILY_MAX = 3;
-  function family(c) { var f = c.id.replace(/\d+/g, ""); return f === "o" ? f + c.chk.op : f; }
+  var FAMILY_MAX = 2;
+  function family(c) {
+    var f = c.id.replace(/\d+/g, "");
+    if (f === "o") return f + c.chk.op;
+    if (f === "w") return f + c.chk.op + (/比/.test(c.q) ? "相差" : "");
+    return f;
+  }
   var kept = {}, ALL_GENERATED = CARDS;
   CARDS = CARDS.filter(function (c) {
     var f = family(c);
-    if (f === "w") return true;
     kept[f] = (kept[f] || 0) + 1;
     return kept[f] <= FAMILY_MAX;
   });
@@ -1550,12 +1557,10 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
   }
   function pruneVanished(state, bank, day) {
     var ok = function (id) { return !!cardById(state, bank, id); }, d = state.days[day];
-    if (d) { d.planIds = d.planIds.filter(ok); d.doneIds = d.doneIds.filter(ok); }
-    if (state.session) {
-      state.session.queue = state.session.queue.filter(ok);
-      state.session.answered = state.session.answered.filter(ok);
-      state.session.wrong = state.session.wrong.filter(ok);
-    }
+    // 只拿掉「還沒做」的：今天計畫裡未完成的、這一輪待答的。已做完的是歷史，照留——
+    // 2026-10-18 題庫裁重複題後（Codex 審 g5-math-review 3751016）：原本連已完成的也刪，今天的「完成」倒退、補做被鎖，進行中的補做也失去已答紀錄而無法結算
+    if (d) d.planIds = d.planIds.filter(function (id) { return ok(id) || d.doneIds.indexOf(id) >= 0; });
+    if (state.session) state.session.queue = state.session.queue.filter(ok);
   }
   // 跨午夜：日期與任務一起切換（矩陣 16、17）
   function syncSession(state, bank, day) {

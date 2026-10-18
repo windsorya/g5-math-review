@@ -187,7 +187,7 @@ test("⑥題目文字與驗算資料一致：chk 的數字都在題目或選項�
   assert.deepEqual(B.CARDS.map(textMismatch).flat(), []);
 });
 test("⑥-b 自檢：只改題面數字、chk 不動，要抓到", () => {
-  const g = JSON.parse(JSON.stringify(B.CARDS.find((c) => c.id === "g2up")));
+  const g = JSON.parse(JSON.stringify(B.ALL_GENERATED.find((c) => c.id === "g2up")));
   g.q = g.q.replace("第 10 天 15 公分", "第 10 天 14 公分");
   assert.ok(textMismatch(g).length, "g2up 題面改成 14 公分應該要抓到");
 });

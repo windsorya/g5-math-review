@@ -106,7 +106,7 @@ function expected(c) {
 
 test("每張卡：欄位合法、id 不重複、選項 2–4 個且不重複、正解在範圍內", () => {
   const ids = new Set();
-  assert.ok(B.CARDS.length >= 100, "題數 " + B.CARDS.length);
+  assert.ok(B.ALL_GENERATED.length >= 100, "產生的題數 " + B.ALL_GENERATED.length);   // 出題張數由「每種題型最多 2 題」那條鎖
   const bank = { cards: B.CARDS, concepts: {}, figs: {} };
   Object.keys(B.CONCEPTS).forEach((k) => { bank.concepts[k] = { unit: B.CONCEPTS[k].unit }; });
   B.CARDS.forEach((c) => {
@@ -132,7 +132,8 @@ test("每張計算卡：用另一套暴力算法重算，正解對、錯誤選�
 test("單元與觀念：涵蓋南一五上第 1～6 單元，每個觀念至少 6 題", () => {
   const units = new Set(Object.values(B.CONCEPTS).map((c) => c.unit));
   assert.deepEqual([...units].sort(), ["m1", "m2", "m3", "m4", "m5", "m6"]);
-  Object.keys(B.CONCEPTS).forEach((k) => assert.ok(B.CARDS.filter((c) => c.concept === k).length >= 6, k + " 題數不足"));
+  Object.keys(B.CONCEPTS).forEach((k) => assert.ok(B.ALL_GENERATED.filter((c) => c.concept === k).length >= 6, k + " 產生的題數不足"));
+  Object.keys(B.CONCEPTS).forEach((k) => assert.ok(B.CARDS.filter((c) => c.concept === k).length >= 4, k + " 出題的題數不足"));
 });
 
 test("分數加減的選項都是真分數（沒有 2/1 這種一看就錯的）", () => {
@@ -203,14 +204,14 @@ test("突變自檢：把題庫改錯，獨立驗算一定要抓到（在記憶�
   assert.equal(expected(s), false);
 });
 
-test("每種題型最多 3 題（2026-10-18）：出題的卡＝產生的卡依題型截取，觀念與題型種類都沒少", () => {
+test("每種題型最多 2 題（2026-10-18）：出題的卡＝產生的卡依題型截取，觀念與題型種類都沒少", () => {
   assert.equal(B.ALL_GENERATED.length, 184);
-  assert.equal(B.CARDS.length, 116);
+  assert.equal(B.CARDS.length, 84);
   const n = {}; B.CARDS.forEach((c) => { const f = B.family(c); n[f] = (n[f] || 0) + 1; });
-  const over = Object.keys(n).filter((f) => f !== "w" && n[f] > B.FAMILY_MAX);
+  const over = Object.keys(n).filter((f) => n[f] > B.FAMILY_MAX);
   assert.deepEqual(over, []);
   assert.ok(n["o+"] > 0 && n["o-"] > 0, "異分母加、減都要留");
-  assert.equal(n.w, B.ALL_GENERATED.filter((c) => B.family(c) === "w").length, "分數應用題全留");
+  assert.deepEqual(["w+", "w-", "w-相差"].map((f) => n[f]), [2, 2, 2], "應用題三種情境（合起來、剩下、相差）各留 2 題");
   const kinds = (cs) => [...new Set(cs.map((c) => c.chk.k))].sort().join(",");
   assert.equal(kinds(B.CARDS), kinds(B.ALL_GENERATED), "裁減後題型（chk.k）種類不得變少");
   const fams = (cs) => [...new Set(cs.map(B.family))].sort().join(",");

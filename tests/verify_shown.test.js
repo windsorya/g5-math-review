@@ -99,9 +99,9 @@ K.forEach((r) => {
 });
 
 /* ---------- A01–A16 ---------- */
-test("A01 覆蓋：產生的 184 張（出題 116 張）逐卡驗算，31 種 k 全部辨識，無跳過、無未知句型、無預設通過", () => {
+test("A01 覆蓋：產生的 184 張（出題 84 張）逐卡驗算，31 種 k 全部辨識，無跳過、無未知句型、無預設通過", () => {
   assert.equal(B.ALL_GENERATED.length, 184);
-  assert.equal(B.CARDS.length, 116);
+  assert.equal(B.CARDS.length, 84);
   assert.equal(new Set(B.CARDS.map((c) => c.chk.k)).size, 31, "出題的卡也要 31 種 k 都有");
   const bad = [], kinds = new Set();
   B.ALL_GENERATED.forEach((c) => {
