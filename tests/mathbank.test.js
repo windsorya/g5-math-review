@@ -206,11 +206,12 @@ test("突變自檢：把題庫改錯，獨立驗算一定要抓到（在記憶�
 
 test("每種題型最多 2 題（2026-10-18）：出題的卡＝產生的卡依題型截取，觀念與題型種類都沒少", () => {
   assert.equal(B.ALL_GENERATED.length, 184);
-  assert.equal(B.CARDS.length, 84);
+  assert.equal(B.CARDS.length, 105);
   const n = {}; B.CARDS.forEach((c) => { const f = B.family(c); n[f] = (n[f] || 0) + 1; });
   const over = Object.keys(n).filter((f) => n[f] > B.FAMILY_MAX);
   assert.deepEqual(over, []);
-  assert.ok(n["o+"] > 0 && n["o-"] > 0, "異分母加、減都要留");
+  assert.ok(Object.keys(n).some((f) => f.startsWith("o+")) && Object.keys(n).some((f) => f.startsWith("o-")), "異分母加、減都要留");
+  assert.deepEqual(["mr同時是 2 和 5 的倍數", "mr是 5 的倍數", "mr是 2 的倍數", "ax3", "ax4", "ax5"].filter((f) => !n[f]), [], "不同規則的題型都要留（Codex 審 9af8526：2 的倍數被裁掉）");
   assert.deepEqual(["w+", "w-", "w-相差"].map((f) => n[f]), [2, 2, 2], "應用題三種情境（合起來、剩下、相差）各留 2 題");
   const kinds = (cs) => [...new Set(cs.map((c) => c.chk.k))].sort().join(",");
   assert.equal(kinds(B.CARDS), kinds(B.ALL_GENERATED), "裁減後題型（chk.k）種類不得變少");

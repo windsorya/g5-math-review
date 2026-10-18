@@ -796,15 +796,25 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
    *   重複的判準（同日律師）：「重複是指a題可以答對，也能夠答對b或c題，那b、c題就可能是重複觀念題」。
    * 同一種題型只換數字＝會算 a 就會算 b ⇒ 重複。仍留 2 題而不是 1 題：同一張卡隔幾天再出，答案會被記住，兩張輪流才看得出是會方法。
    * 題型＝卡片 id 去掉數字（f0g、f1g…→fg）；異分母加減（o）再分加法、減法；分數應用題（w）分「合起來／剩下／相差」三種情境。
-   * cap-why：src/core.js 實際排程模擬 10/13 起天天做完、量 10/18～11/4（~/scripts/state/autocont/g5math-load-sim5-20261018.js 與同目錄 sim6，三個亂數種子平均）：
-   *          答對 8 成：全部 184 張每天 37.3 張、考前學會 39／46 種題型；每種 3 題 23.5 張、42 種；每種 2 題 17.3 張、45 種；每種 1 題 10.1 張、46 種。
-   *          答對 6 成：全部 58.1 張、37 種；3 題 37.2 張、39 種；2 題 30.4 張、42 種；1 題 19.1 張、38 種（一張卡要連 3 天答對，機會太少）——2 題兩種答對率都學會最多。
+   * cap-why：src/core.js 實際排程模擬 10/13 起天天做完、量 10/18～11/4（~/scripts/state/autocont/g5math-load-sim5-20261018.js 的作法，三個亂數種子平均；題型依下面 family() 的規則分組共 64 種）：
+   *          答對 8 成：全部 184 張每天 37.3 張、考前學會 51／64 種題型；每組 2 題（105 張）每天 21.8 張、學會 55 種。
+   *          答對 6 成：全部 58.1 張、43 種；每組 2 題 35.8 張、47 種。另比過每組 1／2／3 題（id 分組時）：2 題兩種答對率都學會最多（1 題時一張卡要連 3 天答對，機會太少）。
    * 被拿掉的變體不會影響她既有進度：core 的 pruneVanished 會略過題庫裡已不存在的卡。 */
   var FAMILY_MAX = 2;
+  // 題型＝同一條規則、同一個陷阱，只換數字。id 去數字只是起點：同一個 id 字首底下若是不同規則或不同陷阱，要再分開
+  // （Codex 審 9af8526：m0r／m1r／m2r 是 2 和 5、5、2 的倍數三條規則，被當成換數字裁掉了「2 的倍數」）
   function family(c) {
-    var f = c.id.replace(/\d+/g, "");
-    if (f === "o") return f + c.chk.op;
-    if (f === "w") return f + c.chk.op + (/比/.test(c.q) ? "相差" : "");
+    var f = c.id.replace(/\d+/g, ""), k = c.chk, ans = c.opts[c.a];
+    if (f === "o") {   // 通分三種情況：分母互質（相乘）、一個是另一個的倍數（用大的）、有公因數（最小公倍數）
+      var rel = gcd(k.b, k.d) === 1 ? "互質" : (Math.max(k.b, k.d) % Math.min(k.b, k.d) === 0 ? "倍數" : "公因數");
+      return f + k.op + rel;
+    }
+    if (f === "w") return f + k.op + (/比/.test(c.q) ? "相差" : "");
+    if (f === "mr") return f + (k.which === "是 10 的倍數" ? "同時是 2 和 5 的倍數" : k.which);   // 10 的倍數＝同時是 2 和 5 的倍數，同一條規則（個位是 0）
+    if (f === "ax" || f === "asum" || f === "areg") return f + (f === "ax" ? k.n : (k.n <= 4 ? "背" : "算"));   // 三角形 180／四邊形 360／五邊形 540 是不同總和；正三角形、正方形的角與四邊形內角和是背的，其餘要算
+    if (f === "preg") return f + ans + (/菱形/.test(c.q) ? "邊等角不等" : "");   // 是／不是正多邊形；菱形（邊相等、角不相等）和長方形（角相等、邊不相等）是不同陷阱
+    if (f === "s") return f + (/^正/.test(k.shape) ? "正多邊形" : k.shape);   // 正 n 邊形有 n 條是同一規則；長方形 2 條、等腰三角形 1 條各是一件事
+    if (f === "c" || f === "cmix") return f + (ans === "＝" || ans === "=" ? "相等" : (f === "c" && (gcd(k.a, k.b) > 1 || gcd(k.c, k.d) > 1) ? "先約分" : ""));
     return f;
   }
   var kept = {}, ALL_GENERATED = CARDS;
@@ -1560,7 +1570,16 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
     // 只拿掉「還沒做」的：今天計畫裡未完成的、這一輪待答的。已做完的是歷史，照留——
     // 2026-10-18 題庫裁重複題後（Codex 審 g5-math-review 3751016）：原本連已完成的也刪，今天的「完成」倒退、補做被鎖，進行中的補做也失去已答紀錄而無法結算
     if (d) d.planIds = d.planIds.filter(function (id) { return ok(id) || d.doneIds.indexOf(id) >= 0; });
-    if (state.session) state.session.queue = state.session.queue.filter(ok);
+    if (state.session) {
+      var se = state.session, before = se.queue.length;
+      se.queue = se.queue.filter(ok);
+      // 補做做到一半、剩下的題剛好全被拿掉：當場把已答的結算到那天（和做完補做一樣）。
+      // 不結算的話畫面沒有「繼續補做」也不會結算，再按補做還會清掉已答（Codex 審 g5-math-review 9af8526）
+      if (se.makeup && before && !se.queue.length && se.answered.length && se.day === day && se.makeup < day && !(state.days[se.makeup] && state.days[se.makeup].touched.length)) {
+        var got = claimable(state, day, se.answered);
+        if (got.length) { var cd = state.days[se.makeup] || (state.days[se.makeup] = blankDay()); cd.planIds = got.slice(); cd.doneIds = got.slice(); cd.touched = got.slice(); cd.madeUp = day; }
+      }
+    }
   }
   // 跨午夜：日期與任務一起切換（矩陣 16、17）
   function syncSession(state, bank, day) {
@@ -2215,6 +2234,7 @@ function $(s){return document.querySelector(s);}
 function esc(t){return String(t).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function md(k){return k?(+k.slice(5,7))+"/"+(+k.slice(8,10)):"";}
 function card(id){return C.cardById(S(),BANK,id);}
+function redoIds(se){return se.wrong.filter(function(id){return !!card(id);});}   // 「再練答錯的」只算題庫裡還在的卡（題庫裁重複題後，答錯過的卡可能已被拿掉；Codex 審 g5-math-review 9af8526）
 function conceptOn(cid){return C.conceptOn(S(),BANK,cid);}
 function srcLine(c){return '<div class="src">'+esc(c.page?("出處："+c.page):SAMPLE)+"</div>";}
 function on(sel,fn){var el=typeof sel==="string"?$(sel):sel;if(el)el.onclick=fn;}
@@ -2337,8 +2357,8 @@ function renderHome(){
   if(!v.planIds.length){
     h='<div class="done"><b class="t">今天沒有排定卡片</b><p class="muted" style="margin:0">可以點下面的觀念看解說、跟著算一題，或「考考爸媽」。</p>'+cont+'<div class="row" style="justify-content:center"><button class="btn ghost" type="button" id="goTeach">考考爸媽</button></div></div>';
   }else if(v.completed){
-    h='<div class="done"><b class="t">今天的卡片都做完了</b><p class="muted" style="margin:0">今天 '+v.M.cardProgress.planned+' 張全部完成。想加碼可以跟著算一題、考考爸媽'+(se&&se.wrong.length?'，或再練答錯的卡':'')+'。</p>'+cont+
-      '<div class="row" style="justify-content:center">'+(se&&se.wrong.length?'<button class="btn ghost" type="button" id="goRedo">再練答錯的 '+se.wrong.length+' 張</button>':'')+'<button class="btn ghost" type="button" id="goTeach">考考爸媽</button></div></div>';
+    h='<div class="done"><b class="t">今天的卡片都做完了</b><p class="muted" style="margin:0">今天 '+v.M.cardProgress.planned+' 張全部完成。想加碼可以跟著算一題、考考爸媽'+(se&&redoIds(se).length?'，或再練答錯的卡':'')+'。</p>'+cont+
+      '<div class="row" style="justify-content:center">'+(se&&redoIds(se).length?'<button class="btn ghost" type="button" id="goRedo">再練答錯的 '+redoIds(se).length+' 張</button>':'')+'<button class="btn ghost" type="button" id="goTeach">考考爸媽</button></div></div>';
   }else{
     var due=v.planIds.filter(function(id){return C.cardState(S(),id).seen>0;}).length, fresh=v.planIds.length-due;
     var parts=[]; if(due) parts.push("到期複習 "+due+" 張"); if(fresh) parts.push("新卡 "+fresh+" 張"); if(v.doneIds.length) parts.push("已做 "+v.doneIds.length+" 張");
@@ -2355,7 +2375,7 @@ function renderHome(){
   on("#goLight",function(){beginRound({type:"sessionStart",size:3});});
   on("#goOn",function(){var se2=V().session;if(se2&&se2.makeup)myMakeup=se2.makeup;startRound();});   // 按「繼續補做」＝本分頁接手這份補做
   on("#goTeach",function(){renderTeach();});
-  on("#goRedo",function(){var se2=V().session;if(!se2){renderHome();return;}beginRound({type:"sessionStart",kind:"redo",ids:se2.wrong.slice()});});   // 存檔被別處清掉後按舊畫面的按鈕：照磁碟現況回首頁，不拋錯（Codex 審 g5-sci-review 4d8b1e0，四站同型）
+  on("#goRedo",function(){var se2=V().session;if(!se2){renderHome();return;}beginRound({type:"sessionStart",kind:"redo",ids:redoIds(se2)});});   // 存檔被別處清掉後按舊畫面的按鈕：照磁碟現況回首頁，不拋錯（Codex 審 g5-sci-review 4d8b1e0，四站同型）
   renderSide();
 }
 // 小考複習：把整個單元（或一個觀念）排成一輪；作答照規則記分、隔天照樣複習，不改今天的計畫
@@ -2701,13 +2721,13 @@ function renderEnd(){
     '<p style="margin:0">這一輪做了 '+se.answered.length+' 張'+(se.answered.length?'，第一次就答對 '+Math.max(0,right)+' 張':'')+'。</p>'+
     (v.completed?'':v.planIds.length?'<p class="muted" style="margin:0">今天的卡片完成 '+v.M.cardProgress.done+' / '+v.M.cardProgress.planned+' 張，還有 '+v.remainingIds.length+' 張，等一下想做再按開始。</p>':'')+
     '<div class="row" style="justify-content:center">'+(!v.completed&&v.remainingIds.length?'<button class="btn" type="button" id="goMore">繼續做剩下的 '+v.remainingIds.length+' 張</button>':'')+
-    (se.wrong.length?'<button class="btn ghost" type="button" id="goRedo">再練答錯的 '+se.wrong.length+' 張</button>':'')+
+    (redoIds(se).length?'<button class="btn ghost" type="button" id="goRedo">再練答錯的 '+redoIds(se).length+' 張</button>':'')+
     '<button class="btn ghost" type="button" id="goTeach">考考爸媽</button><button class="btn ghost" type="button" id="goHome">回首頁</button></div>'+
     segMore(se)+
     '<div style="display:grid;gap:8px;justify-items:center"><span class="small muted">今天練習的感覺？（可以不選）</span><div class="moods" id="moods">'+
     ["good","ok","tired"].map(function(m){return '<button type="button" data-m="'+m+'" aria-label="'+MOOD_NAME[m]+'"'+(v.day.mood===m?' class="on"':'')+'>'+FACES[m]+'</button>';}).join("")+'</div></div></div>';
   on("#goMore",function(){beginRound({type:"sessionStart"});});
-  on("#goRedo",function(){var se2=V().session;if(!se2){renderHome();return;}beginRound({type:"sessionStart",kind:"redo",ids:se2.wrong.slice()});});   // 存檔被別處清掉後按舊畫面的按鈕：照磁碟現況回首頁，不拋錯（Codex 審 g5-sci-review 4d8b1e0，四站同型）
+  on("#goRedo",function(){var se2=V().session;if(!se2){renderHome();return;}beginRound({type:"sessionStart",kind:"redo",ids:redoIds(se2)});});   // 存檔被別處清掉後按舊畫面的按鈕：照磁碟現況回首頁，不拋錯（Codex 審 g5-sci-review 4d8b1e0，四站同型）
   on("#goTeach",function(){renderTeach();});
   on("#goHome",renderHome);
   on("#goSeg",function(){startReview(lastReview,false);});
