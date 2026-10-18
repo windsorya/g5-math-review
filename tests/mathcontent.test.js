@@ -249,6 +249,33 @@ test("⑧全部因數題：提示＝核准句、照核准句的規則找得齊�
     assert.equal(pairsByApprovedRule(n).join("、"), all.join("、"), n + " 照規則找不齊");
   });
 });
+// ⑨ 重複題（律師 2026-10-11 自然站判準：換句話說、正反對調、另一題的一部分、換例子同答案＝重複；反過來問、不同數值不算）
+//    10-18 律師問「是否與原有題庫有重複題目？」：20／30、30／45 的最大公因數就是全部公因數的一部分、5/6 那組含擴分題的答案 15/18 ⇒ 換數字並鎖住
+const pairKey = (a, b) => [a, b].sort((x, y) => x - y).join(",");
+function dupProblems(cards) {
+  const bad = [], by = (k) => cards.filter((c) => c.chk.k === k);
+  const gcdPairs = new Set(by("gcd").concat(by("iscommonfactor")).map((c) => pairKey(c.chk.a, c.chk.b)));
+  by("allcommon").forEach((c) => { if (gcdPairs.has(pairKey(c.chk.a, c.chk.b))) bad.push(c.id + "：和最大公因數／公因數題同一對數"); });
+  const nSet = new Set(by("nfactors").concat(by("isfactor")).map((c) => c.chk.n));
+  by("allfactors").forEach((c) => { if (nSet.has(c.chk.n)) bad.push(c.id + "：和因數個數／因數題同一個數"); });
+  const answered = new Set(by("expand").map((c) => (c.chk.n * c.chk.m / c.chk.d) + "/" + c.chk.m).concat(by("equiv").map((c) => c.opts[c.a])));
+  by("allequiv").forEach((c) => c.opts[c.a].split("、").forEach((f) => { if (answered.has(f)) bad.push(c.id + "：正解那組含 " + f + "（另一題的答案）"); }));
+  ["allfactors", "allcommon", "allequiv", "relation"].forEach((k) => {
+    const seen = {}; by(k).forEach((c) => { const a = c.opts[c.a]; if (seen[a]) bad.push(c.id + "：和 " + seen[a] + " 換例子同答案「" + a + "」"); seen[a] = c.id; });
+  });
+  return bad;
+}
+test("⑨新題型不和原題庫重複（另一題的一部分、換例子同答案）", () => {
+  assert.deepEqual(dupProblems(B.CARDS), []);
+});
+test("⑨-b 自檢：放回 10-18 那三題（20/30、30/45、5/6）一定抓到", () => {
+  const cards = JSON.parse(JSON.stringify(B.CARDS));
+  const f0 = cards.find((c) => c.id === "f0com"); f0.chk.a = 20; f0.chk.b = 30;
+  const f2 = cards.find((c) => c.id === "f2com"); f2.chk.a = 30; f2.chk.b = 45;
+  const q2 = cards.find((c) => c.id === "q2all"); q2.opts[q2.a] = "10/12、15/18、20/24";
+  const bad = dupProblems(cards);
+  assert.ok(bad.some((x) => x.startsWith("f0com")) && bad.some((x) => x.startsWith("f2com")) && bad.some((x) => x.startsWith("q2all")), bad.join("｜"));
+});
 test("⑧-b 自檢：改過的提示一律抓到（40、64 都試）；核准句兩個都過", () => {
   const forN = (n) => B.CARDS.find((c) => c.chk.k === "allfactors" && c.chk.n === n);
   ["兩個數碰在一起就停。", "右邊的數超過左邊的數就停。", "找到一個就停。"].forEach((tail) => [40, 64].forEach((n) => {

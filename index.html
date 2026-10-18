@@ -520,7 +520,8 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
       "成對找：" + pairs + "。全部因數是 " + f.join("、") + "。", "從 1 開始成對找：1×" + n + "、2×…，左邊的數追上右邊的數就停。", { k: "allfactors", n: n }));   // 「追上」＝相等（64：8×8）或超過（40：5×8 之後是 8×5）；Codex 審 ad46572：舊寫「碰在一起」只對平方數成立
   });
   // 錯法＝漏了最大公因數本身、只寫了其中一個數的因數、多寫一個只能整除其中一個數的數
-  [[20, 30], [24, 40], [30, 45], [16, 28], [30, 42], [42, 70]].forEach(function (p, k) {
+  // 數對避開既有最大公因數題用過的（2026-10-18 律師問有無重複：20/30、30/45 的最大公因數是全部公因數的一部分＝同題）
+  [[18, 45], [24, 40], [24, 60], [16, 28], [30, 42], [42, 70]].forEach(function (p, k) {
     var a = p[0], b = p[1], cf = factors(gcd(a, b)), x;
     for (x = 2; (a % x === 0) === (b % x === 0); x++);   // 最小的「只能整除其中一個」的數
     var who = a % x === 0 ? [a, b] : [b, a];
@@ -678,7 +679,7 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
       "整數部分不動；分母乘了幾，分子就乘幾。", { k: "mixexpand", w: w, n: n, d: d, m: m }));
   });
   // 「圈出所有等值分數」（考古卷 113 內安、114 安和）：一組裡只要有一個不一樣大，這組就不對
-  [[3, 4], [2, 9], [5, 6], [3, 10]].forEach(function (p, k) {
+  [[3, 4], [2, 9], [5, 7], [3, 10]].forEach(function (p, k) {
     var n = p[0], d = p[1], set = function (fs) { return fs.map(function (f) { return ft(f[0], f[1]); }).join("、"); };
     var R = [[n * 2, d * 2], [n * 3, d * 3], [n * 4, d * 4]];
     add(mk("q" + k + "all", "4a", "下面哪一組分數，全部都和 " + ft(n, d) + " 一樣大？", { v: set(R) },

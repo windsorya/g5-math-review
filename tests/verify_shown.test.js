@@ -62,7 +62,7 @@ const K = [
   // K26–K31：2026-10-18 依考古卷補的題型（全部因數、全部公因數、因數倍數關係、帶分數擴分、全組等值、帶分數比大小）
   { n: "K26", k: "allfactors", id: "f0all", from: "64 的全部因數", to: "32 的全部因數", correct: [], reason: "NO_CORRECT",
     more: (a) => assert.equal(a.solution, "1、2、4、8、16、32") },
-  { n: "K27", k: "allcommon", id: "f0com", from: "20 和 30", to: "20 和 40", correct: ["1、2、4、5、10、20"], reason: "WRONG_KEY" },
+  { n: "K27", k: "allcommon", id: "f0com", from: "18 和 45", to: "18 和 36", correct: ["1、2、3、6、9、18"], reason: "WRONG_KEY" },
   { n: "K28", k: "relation", id: "f0rel", from: "＝ 14", to: "＝ 15", correct: [], reason: "BAD_DATA" },
   { n: "K29", k: "mixexpand", id: "e0mix", from: "□/12", to: "□/16", correct: [], reason: "NO_CORRECT",
     more: (a) => assert.equal(a.solution, "12") },
