@@ -501,7 +501,7 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
       [{ v: f.filter(function (a) { return a !== mid; }).join("、"), why: "漏了 " + mid + "：" + n + " ÷ " + mid + " ＝ " + (n / mid) + "，整除。" },
        { v: f.concat([x]).sort(function (a, b) { return a - b; }).join("、"), why: x + " 不是因數：" + n + " ÷ " + x + " 除不盡。" },
        { v: [1, 2, 3, 4].map(function (i) { return n * i; }).join("、"), why: "這是 " + n + " 的倍數，不是因數。" }],
-      "成對找：" + pairs + "。全部因數是 " + f.join("、") + "。", "從 1 開始成對找：1×" + n + "、2×…，兩個數碰在一起就停。", { k: "allfactors", n: n }));
+      "成對找：" + pairs + "。全部因數是 " + f.join("、") + "。", "從 1 開始成對找：1×" + n + "、2×…，左邊的數追上右邊的數就停。", { k: "allfactors", n: n }));   // 「追上」＝相等（64：8×8）或超過（40：5×8 之後是 8×5）；Codex 審 ad46572：舊寫「碰在一起」只對平方數成立
   });
   // 錯法＝漏了最大公因數本身、只寫了其中一個數的因數、多寫一個只能整除其中一個數的數
   [[20, 30], [24, 40], [30, 45], [16, 28], [30, 42], [42, 70]].forEach(function (p, k) {

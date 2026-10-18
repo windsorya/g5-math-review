@@ -213,3 +213,27 @@ test("⑦-b 自檢：「長方形的對角線是不是對稱軸？」要抓到",
   assert.equal(shapeAmbiguity([{ id: "新", q: "一般的平行四邊形（不是長方形、也不是菱形）0條。" }]).length, 0);
   assert.equal(shapeAmbiguity([{ id: "只寫一般", q: "一般的平行四邊形0條。" }]).length, 1);
 });
+
+// ⑧ 全部因數題（2026-10-18 新題型；Codex 審 ad46572）：「兩個數碰在一起就停」只對平方數成立（64：8×8），
+//    40 是 5×8 之後變 8×5、永遠不相等 ⇒ 停止條件必須對每一個數都成立；解說列的成對也要和獨立算出來的一樣
+function factorHintBad(c) {
+  const n = c.chk.n, pairs = [];
+  for (let a = 1; a * a <= n; a++) if (n % a === 0) pairs.push(a + "×" + n / a);
+  const bad = [];
+  if (!String(c.why).includes("成對找：" + pairs.join("、") + "。")) bad.push(c.id + "：解說的成對不是 " + pairs.join("、"));
+  const square = Number.isInteger(Math.sqrt(n));
+  if (/碰在一起|一樣大就停|相等就停/.test(c.hint) && !square) bad.push(c.id + "：停止條件只對平方數成立：" + c.hint);
+  if (!/追上|超過|不比.*小/.test(c.hint)) bad.push(c.id + "：提示沒寫什麼時候停：" + c.hint);
+  return bad;
+}
+test("⑧全部因數題：提示的停止條件對每個數都成立、解說的成對正確", () => {
+  const cards = B.CARDS.filter((c) => c.chk.k === "allfactors");
+  assert.ok(cards.length >= 6);
+  assert.deepEqual(cards.map(factorHintBad).flat(), []);
+});
+test("⑧-b 自檢：舊提示「兩個數碰在一起就停」放在 40 要抓到；放在 64 不誤判", () => {
+  const base = B.CARDS.find((c) => c.chk.k === "allfactors" && c.chk.n === 40);
+  assert.ok(factorHintBad({ ...base, hint: "從 1 開始成對找：1×40、2×…，兩個數碰在一起就停。" }).length > 0);
+  const sq = B.CARDS.find((c) => c.chk.k === "allfactors" && c.chk.n === 64);
+  assert.deepEqual(factorHintBad({ ...sq, hint: "從 1 開始成對找：1×64、2×…，左邊的數追上右邊的數就停。" }), []);
+});
