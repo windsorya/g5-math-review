@@ -12,7 +12,7 @@ const B = require("../src/mathbank.js");   // 題庫資料（受驗對象）；�
 const KEY = require("./fact_key.js");
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
-const card = (id) => { const c = B.CARDS.find((x) => x.id === id); assert.ok(c, "題庫沒有 " + id); return clone(c); };
+const card = (id) => { const c = B.ALL_GENERATED.find((x) => x.id === id); assert.ok(c, "題庫沒有 " + id); return clone(c); };
 const shown = (c) => ({ q: c.q, opts: c.opts.slice() });
 const texts = (c, idx) => idx.map((i) => c.opts[i]);
 const editQ = (c, from, to) => { assert.ok(c.q.includes(from), c.id + " 題文找不到「" + from + "」：" + c.q); c.q = c.q.replace(from, to); return c; };
@@ -99,10 +99,12 @@ K.forEach((r) => {
 });
 
 /* ---------- A01–A16 ---------- */
-test("A01 覆蓋：184 張逐卡驗算，31 種 k 全部辨識，無跳過、無未知句型、無預設通過", () => {
-  assert.equal(B.CARDS.length, 184);
+test("A01 覆蓋：產生的 184 張（出題 116 張）逐卡驗算，31 種 k 全部辨識，無跳過、無未知句型、無預設通過", () => {
+  assert.equal(B.ALL_GENERATED.length, 184);
+  assert.equal(B.CARDS.length, 116);
+  assert.equal(new Set(B.CARDS.map((c) => c.chk.k)).size, 31, "出題的卡也要 31 種 k 都有");
   const bad = [], kinds = new Set();
-  B.CARDS.forEach((c) => {
+  B.ALL_GENERATED.forEach((c) => {
     const r = V.verifyCard(clone(c));
     kinds.add(c.chk.k);
     if (!r.ok || r.issues.length || !r.analysis.kind || r.analysis.correctIndices.length !== 1 || r.analysis.truth.length !== c.opts.length ||
@@ -153,7 +155,7 @@ test("A05 chk 不得決定答案：o0、c0 固定 q／opts，給兩份不同 chk
 
 test("A06 所有錯誤位置：每張卡每個 j≠a 各自令 a=j，都因答案位置錯誤被拒", () => {
   const survived = [];
-  B.CARDS.forEach((c0) => c0.opts.forEach((_, j) => {
+  B.ALL_GENERATED.forEach((c0) => c0.opts.forEach((_, j) => {
     if (j === c0.a) return;
     const c = clone(c0); c.a = j;
     const r = V.verifyCard(c);
@@ -164,7 +166,7 @@ test("A06 所有錯誤位置：每張卡每個 j≠a 各自令 a=j，都因答�
 
 test("A07 合法重排：循環位移 opts／wrongWhy 並同步更新 a，全部通過", () => {
   const bad = [];
-  B.CARDS.forEach((c0) => { for (let s = 1; s < c0.opts.length; s++) {
+  B.ALL_GENERATED.forEach((c0) => { for (let s = 1; s < c0.opts.length; s++) {
     const c = clone(c0), n = c.opts.length, rot = (arr) => arr.map((_, i) => arr[(i + s) % n]);
     c.opts = rot(c0.opts); c.wrongWhy = rot(c0.wrongWhy); c.a = (c0.a - s + n) % n;
     assert.equal(c.opts[c.a], c0.opts[c0.a]);
@@ -291,7 +293,7 @@ test("答案鑰覆核：是非題的審定答案與圖形模型一致；每筆�
       assert.equal(r.opts.find((o) => o.ok).text, s.regular ? "對" : "錯", r.id + " 答案鑰與圖形模型不一致");
     }
   });
-  const fc = B.CARDS.filter((c) => c.chk.k === "fact");
+  const fc = B.ALL_GENERATED.filter((c) => c.chk.k === "fact");
   assert.deepEqual(fc.filter((c) => !KEY.RECORDS.some((r) => r.q === c.q)).map((c) => c.id), [], "觀念題都要有審定紀錄");
 });
 

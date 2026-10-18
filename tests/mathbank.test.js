@@ -125,7 +125,7 @@ test("每張卡：欄位合法、id 不重複、選項 2–4 個且不重複、�
 });
 
 test("每張計算卡：用另一套暴力算法重算，正解對、錯誤選項都真的錯", () => {
-  const bad = B.CARDS.filter((c) => !expected(c)).map((c) => c.id + "：" + c.q + " → " + c.opts.join("｜") + "（正解 " + c.opts[c.a] + "）");
+  const bad = B.ALL_GENERATED.filter((c) => !expected(c)).map((c) => c.id + "：" + c.q + " → " + c.opts.join("｜") + "（正解 " + c.opts[c.a] + "）");
   assert.deepEqual(bad, []);
 });
 
@@ -178,25 +178,43 @@ test("幾何驗算器本身：邊長／角度／對稱軸實算結果正確", ()
   assert.equal(shapeOf("長方形"), null, "沒排除正方形的長方形不能唯一決定對稱軸數");
 });
 
+// 2026-10-18 每種題型只出 3 題後：被裁的變體仍由產生器產生（ALL_GENERATED），突變自檢對全部產生的卡做，日後調上限也不漏驗
 test("突變自檢：把題庫改錯，獨立驗算一定要抓到（在記憶體複本上改）", () => {
+  const ALL = B.ALL_GENERATED;
   const clone = (c) => JSON.parse(JSON.stringify(c));
   const flip = (c) => { const m = clone(c); m.a = m.opts.findIndex((o, i) => i !== m.a); return m; };
-  const sq = B.CARDS.find((c) => c.q === "是非題：「正方形是正多邊形。」");
+  const sq = ALL.find((c) => c.q === "是非題：「正方形是正多邊形。」");
   assert.ok(sq && expected(sq), "原題要通過");
   assert.equal(expected(flip(sq)), false, "把正方形改判成「不是正多邊形」必須紅");
   // 每一張卡：把正解換成任一錯誤選項，驗算都必須不通過（含所有觀念題）
-  const survived = B.CARDS.filter((c) => expected(flip(c))).map((c) => c.id);
+  const survived = ALL.filter((c) => expected(flip(c))).map((c) => c.id);
   assert.deepEqual(survived, [], "正解被換掉卻仍通過：" + survived.join("、"));
   // 折線：把資料改成兩段並列最多，maxrise 必須紅（不再沿用「取第一個」）
-  const up = clone(B.CARDS.find((c) => c.chk.k === "maxrise")); up.chk.v = [0, 4, 8, 9, 10];
+  const up = clone(ALL.find((c) => c.chk.k === "maxrise")); up.chk.v = [0, 4, 8, 9, 10];
   up.opts = ["第 2 天 到 第 4 天", "第 4 天 到 第 6 天"].map((x) => x.replace(/第 (\d+) 天/g, (_, d) => up.chk.lab[+d / 2 - 1])); up.a = 0;
   assert.equal(expected(up), false, "兩段並列最多時不得只認第一段");
   // 2026-10-18 新題型：正解那個選項本身被改錯（四個選項都不是全部因數／公因數）也要紅——上面的換位突變測不到這種
-  const fa = clone(B.CARDS.find((c) => c.chk.k === "allfactors")); fa.opts[fa.a] = fa.opts[fa.a].replace(/、\d+$/, "");
+  const fa = clone(ALL.find((c) => c.chk.k === "allfactors")); fa.opts[fa.a] = fa.opts[fa.a].replace(/、\d+$/, "");
   assert.equal(expected(fa), false, "正解少掉最後一個因數必須紅");
-  const fc = clone(B.CARDS.find((c) => c.chk.k === "allcommon")); fc.opts[fc.a] = fc.opts[fc.a].replace(/^1、/, "");
+  const fc = clone(ALL.find((c) => c.chk.k === "allcommon")); fc.opts[fc.a] = fc.opts[fc.a].replace(/^1、/, "");
   assert.equal(expected(fc), false, "正解少掉 1 必須紅");
   // 對稱軸：等腰三角形不排除正三角形 ⇒ 必須紅
-  const s = clone(B.CARDS.find((c) => c.chk.k === "axes" && /等腰/.test(c.chk.shape))); s.chk.shape = "等腰三角形（兩腰一樣長）";
+  const s = clone(ALL.find((c) => c.chk.k === "axes" && /等腰/.test(c.chk.shape))); s.chk.shape = "等腰三角形（兩腰一樣長）";
   assert.equal(expected(s), false);
+});
+
+test("每種題型最多 3 題（2026-10-18）：出題的卡＝產生的卡依題型截取，觀念與題型種類都沒少", () => {
+  assert.equal(B.ALL_GENERATED.length, 184);
+  assert.equal(B.CARDS.length, 116);
+  const n = {}; B.CARDS.forEach((c) => { const f = B.family(c); n[f] = (n[f] || 0) + 1; });
+  const over = Object.keys(n).filter((f) => f !== "w" && n[f] > B.FAMILY_MAX);
+  assert.deepEqual(over, []);
+  assert.ok(n["o+"] > 0 && n["o-"] > 0, "異分母加、減都要留");
+  assert.equal(n.w, B.ALL_GENERATED.filter((c) => B.family(c) === "w").length, "分數應用題全留");
+  const kinds = (cs) => [...new Set(cs.map((c) => c.chk.k))].sort().join(",");
+  assert.equal(kinds(B.CARDS), kinds(B.ALL_GENERATED), "裁減後題型（chk.k）種類不得變少");
+  const fams = (cs) => [...new Set(cs.map(B.family))].sort().join(",");
+  assert.equal(fams(B.CARDS), fams(B.ALL_GENERATED), "每一種題型至少留一題");
+  const ids = new Set(B.CARDS.map((c) => c.id));
+  assert.ok(B.CARDS.every((c) => B.ALL_GENERATED.includes(c)) && ids.size === B.CARDS.length);
 });

@@ -240,7 +240,7 @@ function factorHintBad(c) {
   return bad;
 }
 test("⑧全部因數題：提示＝核准句、照核准句的規則找得齊成對、解說的成對正確", () => {
-  const cards = B.CARDS.filter((c) => c.chk.k === "allfactors");
+  const cards = B.ALL_GENERATED.filter((c) => c.chk.k === "allfactors");   // 產生的全部（出題只取 3 題，見 mathbank FAMILY_MAX）
   assert.ok(cards.length >= 6);
   assert.deepEqual(cards.map(factorHintBad).flat(), []);
   // 核准句的規則本身：平方數與非平方數、質數、1 都要對（不只題庫裡那六個數）
@@ -267,9 +267,10 @@ function dupProblems(cards) {
 }
 test("⑨新題型不和原題庫重複（另一題的一部分、換例子同答案）", () => {
   assert.deepEqual(dupProblems(B.CARDS), []);
+  assert.deepEqual(dupProblems(B.ALL_GENERATED), [], "被裁的變體日後放回也不得重複");
 });
 test("⑨-b 自檢：放回 10-18 那三題（20/30、30/45、5/6）一定抓到", () => {
-  const cards = JSON.parse(JSON.stringify(B.CARDS));
+  const cards = JSON.parse(JSON.stringify(B.ALL_GENERATED));
   const f0 = cards.find((c) => c.id === "f0com"); f0.chk.a = 20; f0.chk.b = 30;
   const f2 = cards.find((c) => c.id === "f2com"); f2.chk.a = 30; f2.chk.b = 45;
   const q2 = cards.find((c) => c.id === "q2all"); q2.opts[q2.a] = "10/12、15/18、20/24";
@@ -277,7 +278,7 @@ test("⑨-b 自檢：放回 10-18 那三題（20/30、30/45、5/6）一定抓到
   assert.ok(bad.some((x) => x.startsWith("f0com")) && bad.some((x) => x.startsWith("f2com")) && bad.some((x) => x.startsWith("q2all")), bad.join("｜"));
 });
 test("⑧-b 自檢：改過的提示一律抓到（40、64 都試）；核准句兩個都過", () => {
-  const forN = (n) => B.CARDS.find((c) => c.chk.k === "allfactors" && c.chk.n === n);
+  const forN = (n) => B.ALL_GENERATED.find((c) => c.chk.k === "allfactors" && c.chk.n === n);
   ["兩個數碰在一起就停。", "右邊的數超過左邊的數就停。", "找到一個就停。"].forEach((tail) => [40, 64].forEach((n) => {
     assert.ok(factorHintBad({ ...forN(n), hint: "從 1 開始成對找：1×" + n + "、2×…，" + tail }).length > 0, n + "：" + tail);
   }));

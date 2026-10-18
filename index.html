@@ -791,7 +791,23 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
       "先判斷用加還是減，再通分。", { k: "addsub", a: a, b: b, c: c, d: d, op: op, unit: u }));
   });
 
-  var api = { UNITS: UNITS, CONCEPTS: CONCEPTS, CARDS: CARDS, gcd: gcd, lcm: lcm };
+  /* ---------- 同一種題型只留 3 題換數字的版本（2026-10-18 律師：「如果數個題目是在測試是否理解同一個觀念，是否有必要出這麼多題目？」） ----------
+   * 題型＝卡片 id 去掉數字（f0g、f1g…→fg）；異分母加減（o）再分加法、減法，免得只留下加法。分數應用題（w）每題是不同生活情境，不刪。
+   * cap-why：用 src/core.js 實際排程模擬 10/13 起天天做完、10/18～11/4（~/scripts/state/autocont/g5math-load-sim5-20261018.js，三個亂數種子平均）：
+   *          答對 8 成：全部 184 張每天平均 37.3 張（最多 46）、考前學會 39／46 種題型；每種最多 3 題（116 張）每天 23.9 張（最多 30）、學會 42／46 種。
+   *          答對 6 成：58.1→37.6 張／天、學會 37→38 種——量少約四成，學會的題型不減反增（每種題型輪得到第 3 次答對）。
+   * 被拿掉的變體不會影響她既有進度：core 的 pruneVanished 會略過題庫裡已不存在的卡。 */
+  var FAMILY_MAX = 3;
+  function family(c) { var f = c.id.replace(/\d+/g, ""); return f === "o" ? f + c.chk.op : f; }
+  var kept = {}, ALL_GENERATED = CARDS;
+  CARDS = CARDS.filter(function (c) {
+    var f = family(c);
+    if (f === "w") return true;
+    kept[f] = (kept[f] || 0) + 1;
+    return kept[f] <= FAMILY_MAX;
+  });
+
+  var api = { UNITS: UNITS, CONCEPTS: CONCEPTS, CARDS: CARDS, ALL_GENERATED: ALL_GENERATED, FAMILY_MAX: FAMILY_MAX, family: family, gcd: gcd, lcm: lcm };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5MathBank = api;
 })(typeof window !== "undefined" ? window : this);
 
