@@ -616,8 +616,9 @@ def flow_a17(browser):
         for k in range(4):   # 第 k 輪：每張卡點畫面上第 k 個按鈕（卡片選項最多 4 個）；每輪都是全新的瀏覽器狀態
             ctx, pg, errs = open_page(browser)
             err_lists.append(errs)   # 存清單本身，作答時才發生的 pageerror 也收得到（Codex 審 07656942：errors += errs 在作答前就複製，之後的錯誤全漏）
-            pg.locator(f'#concepts .ccard[data-cid="{cid}"]').click(); pg.wait_for_selector("#cAll", timeout=A17_OPEN_MS)
-            pg.locator("#cAll").click(); pg.wait_for_selector("#main .q", timeout=A17_OPEN_MS)
+            # 2026-10-19「練這個觀念的全部」併進「直接闖關」（只出沒做過的；每輪都是全新存檔＝這站全部）
+            pg.locator(f'#concepts .ccard[data-cid="{cid}"]').click(); pg.wait_for_selector("#cGo", timeout=A17_OPEN_MS)
+            pg.locator("#cGo").click(); pg.wait_for_selector("#main .q", timeout=A17_OPEN_MS)
             for _ in range(80):
                 sh = pg.evaluate(A17_SHOWN_JS)
                 if not sh or not sh["opts"]:
