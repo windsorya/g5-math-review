@@ -270,7 +270,10 @@
     var a = p[0], b = p[1], lo = b - a, hi = a + b, right = Math.floor((lo + hi) / 2);
     add(mk("t" + k + "3", "3b", "三角形的兩條邊是 " + a + " 公分和 " + b + " 公分，第三條邊可能是幾公分？", { v: right + " 公分" },
       [{ v: lo + " 公分", why: a + "＋" + lo + "＝" + b + "，沒有比 " + b + " 長，圍不起來。" }, { v: hi + " 公分", why: a + "＋" + b + "＝" + hi + "，沒有比 " + hi + " 長。" }, { v: (hi + 2) + " 公分", why: "太長了，" + a + "＋" + b + " 比它短。" }],
-      "第三邊要比 " + b + "－" + a + "＝" + lo + " 長，也要比 " + a + "＋" + b + "＝" + hi + " 短；" + right + " 公分可以。", "第三邊要介於兩邊的差和兩邊的和之間。", { k: "third", a: a, b: b }));
+      // 只用教學重點 13 的「兩邊和大於第三邊」說明（不用「兩邊的差」：五上沒教，2026-10-19 範圍稽核）
+      (right <= b ? "最長的是 " + b + "：" + a + "＋" + right + "＝" + (a + right) + "，比 " + b + " 長"
+                  : "最長的是 " + right + "：" + a + "＋" + b + "＝" + hi + "，比 " + right + " 長") + "，圍得起來；" + right + " 公分可以。",
+      "把三條邊裡最長的找出來，另外兩條加起來要比它長。", { k: "third", a: a, b: b }));
   });
 
   /* ---------- 3c 內角和 ---------- */
@@ -490,8 +493,13 @@
     if (f === "c" || f === "cmix") return f + (ans === "＝" || ans === "=" ? "相等" : (f === "c" && (gcd(k.a, k.b) > 1 || gcd(k.c, k.d) > 1) ? "先約分" : ""));
     return f;
   }
+  // 停出（2026-10-19 範圍稽核，孩子反映太難）：留在 ALL_GENERATED，練過的照到期日複習，只是不再當新卡出。
+  // 依學校表 3 教學重點 5、15 判為超出程度：c0mix／c5mix 公分母 42／63 且兩邊只差一個單位分數（估不出來、只能精算）；
+  // f5all 84 有 12 個因數，選項 11～13 個數字只差一個，變成長串比對。同題型的下一張自動遞補。
+  var RETIRED = { c0mix: 1, c5mix: 1, f5all: 1 };
   var kept = {}, ALL_GENERATED = CARDS;
   CARDS = CARDS.filter(function (c) {
+    if (RETIRED[c.id]) return false;
     var f = family(c);
     kept[f] = (kept[f] || 0) + 1;
     return kept[f] <= FAMILY_MAX;

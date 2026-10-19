@@ -5,6 +5,26 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const B = require("../src/mathbank.js");
 const X = require("../src/mathexplain.js");
+const VIDEOS = require("../src/mathvideos.js");
+
+// ⓪ 2026-10-19 範圍稽核（孩子反映太難）：五上只教列舉法找公因數、只教「兩邊和大於第三邊」。
+// 短除法／互質是六年級（108 課綱 N-6-2）；「兩邊的差」學校教學重點 13 沒有。題目、提示、補救圖解、影片說明都不得出現。
+test("⓪範圍：題卡、提示、補救圖解、影片說明不得出現短除法、互質、兩邊的差", () => {
+  const SIX = /短除|互質|兩邊的差|要比 \d+－\d+＝\d+ 長/;   // 最後一條：用「差」講第三邊範圍的算式寫法
+  const texts = [];
+  B.ALL_GENERATED.forEach((c) => texts.push([c.id, [c.q, c.hint, c.why].concat(c.opts || [], c.wrongWhy || []).join("｜")]));
+  Object.keys(X.EXPLAIN).forEach((k) => X.EXPLAIN[k].forEach((w, i) =>
+    texts.push([k + "/說法" + (i + 1), [w.name, w.task, w.ask].concat(w.lines || []).join("｜") + (typeof w.svg === "function" ? w.svg() : "")])));
+  Object.keys(VIDEOS).forEach((k) => (VIDEOS[k] || []).forEach((v) => texts.push([k + "/影片 " + v.id, v.title + "｜" + v.note])));
+  assert.deepEqual(texts.filter(([, t]) => SIX.test(t)).map(([id]) => id), []);
+});
+
+test("⓪停出：c0mix、c5mix、f5all 不當新卡出，但留在 ALL_GENERATED 讓練過的照常複習", () => {
+  ["c0mix", "c5mix", "f5all"].forEach((id) => {
+    assert.ok(!B.CARDS.some((c) => c.id === id), id + " 仍會當新卡出");
+    assert.ok(B.ALL_GENERATED.some((c) => c.id === id), id + " 從題庫目錄消失（練過的會複習不到）");
+  });
+});
 
 const MAX_SENTENCE = 40;   // 小五每句上限（與 tests/standard.test.js 相同）
 const sentences = (t) => String(t).split(/[。！？；]/).map((s) => s.trim()).filter(Boolean);
