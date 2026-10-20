@@ -711,12 +711,33 @@
     return errs;
   }
   function isTone(x) { return typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 9; }   // 舊存檔沒有 tone 欄位＝第 0 種
+  // 父版補做（逐題歸屬；2d78b55／3bdf478／f139e80，2026-10-14 10:44–11:52 在線上，存檔 v3）寫出過、結算制不收的兩種形狀，
+  // 讀進來時換成結算制的同義寫法（Codex 審 46efbf8a 第 1 項，#2500；同國語站 9baf334／f7bf1e1：原樣拒讀＝整份紀錄判壞檔、封鎖存檔，只剩「清除重來」）。
+  // 只在 v3 換：v4 沒有任何寫入程式寫過這兩種形狀，照舊拒讀。只換父版自己的讀檔檢查也認的值——父版就判壞的照舊判壞，不藉轉換洗白（國語站 Codex 審 9baf334 F1）。
+  //  ① 補做回合 kind:"plan"＋makeup（makeup 是日子、days 裡有那天＝父版 checkState 同一條）→ kind:"review"＋makeup
+  //     （結算制的補做回合就是帶 makeup 的 review 回合，其餘欄位不動）
+  //  ② 開了補做、一題都還沒答（madeUp 是晚於那天的日子、touched 空）→ 拿掉 madeUp：那天其實還沒補到，日曆照「沒練」、可以再補
+  //  ③ 最早那版（2d78b55）不寫 madeUp：補做回合還在、那天已有作答 ⇒ 就是這一輪補的，madeUp＝回合那天
+  //     （結算制靠 madeUp 認「已結算」；少了它，續做完會再送結算被拒，畫面說「這一天已經練過了」——國語站 Codex 審 9baf334 F2）
+  //  已經答過、有 madeUp 的補做日兩版意思相同（父版作答當下就記到那天），原樣保留
+  function liftV3Makeup(o) {
+    var days = isObj(o.days) ? o.days : null, se = o.session;
+    var legacy = !!(days && isObj(se) && se.kind === "plan" && isDay(se.makeup) && isObj(days[se.makeup]));
+    if (days) Object.keys(days).forEach(function (k) {
+      var d = days[k];
+      if (isDay(k) && isObj(d) && isDay(d.madeUp) && d.madeUp > k && Array.isArray(d.touched) && !d.touched.length) delete d.madeUp;
+    });
+    if (!legacy) return;
+    var md = days[se.makeup];
+    if (md.madeUp === undefined && Array.isArray(md.touched) && md.touched.length && isDay(se.day) && se.day > se.makeup) md.madeUp = se.day;
+    se.kind = "review";
+  }
   function decode(text, bank) {
     var o;
     try { o = JSON.parse(text); } catch (e) { return { accepted: false, error: "SCHEMA", detail: ["json"] }; }
     // v4（2026-10-18，Codex 審 8364a83 T17）：資料形狀與 v3 相同，只換版本號——v3 讀進來當 v4，之後一律寫 v4；
     // 還開著的舊頁（只認 v3）寫入前會先讀磁碟，讀到 v4 就拒讀不寫，不會把新版計畫剪回舊規則
-    if (isObj(o) && o.v === 3) o.v = 4;
+    if (isObj(o) && o.v === 3) { liftV3Makeup(o); o.v = 4; }
     var errs = checkState(o, bank);
     return errs.length ? { accepted: false, error: "SCHEMA", detail: errs } : { accepted: true, state: o };
   }
