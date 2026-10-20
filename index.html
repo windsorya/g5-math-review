@@ -2141,9 +2141,13 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
   //  ③ 最早那版（2d78b55）不寫 madeUp：補做回合還在、那天已有作答 ⇒ 就是這一輪補的，madeUp＝回合那天
   //     （結算制靠 madeUp 認「已結算」；少了它，續做完會再送結算被拒，畫面說「這一天已經練過了」——國語站 Codex 審 9baf334 F2）
   //  已經答過、有 madeUp 的補做日兩版意思相同（父版作答當下就記到那天），原樣保留
+  //  回合帶 makeup 卻不是 ① 的形狀（例如 review＋makeup＝結算制寫的）⇒ 父版 checkState 的 session 條就拒讀，不是父版存檔，整份不轉
+  //  （Codex 審 2354f822：② 原本不看回合，review＋makeup 配上「madeUp＋空 touched」——父版與結算制都拒讀——被修整後放行）。
+  //  沒有補做回合時照轉 ②：父版開補做沒答、又改開別的回合，就會留下 madeUp＋空 touched（父版自己認）
   function liftV3Makeup(o) {
     var days = isObj(o.days) ? o.days : null, se = o.session;
     var legacy = !!(days && isObj(se) && se.kind === "plan" && isDay(se.makeup) && isObj(days[se.makeup]));
+    if (isObj(se) && se.makeup !== undefined && !legacy) return;
     if (days) Object.keys(days).forEach(function (k) {
       var d = days[k];
       if (isDay(k) && isObj(d) && isDay(d.madeUp) && d.madeUp > k && Array.isArray(d.touched) && !d.touched.length) delete d.madeUp;
