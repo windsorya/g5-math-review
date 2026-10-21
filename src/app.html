@@ -808,7 +808,15 @@ function retrySave(){
   if(screen==="lab"&&lab&&labGone(rr)) return;
   var f=$("#saveFail");
   if(f&&pending){ if(store.accepted(pending.a.id)){f.remove();feedback(pending,(rr&&rr.info)||{});} return; }
-  if(rr.ok) route();
+  if(rr.ok){ if(!labRefresh()) route(); }
+}
+// 補存成功後，如果她還在同一輪「跟著算一題」，就留在原畫面續接（同社會站 e554ab6，#2632：route() 會把 screen="lab" 導回首頁、只能重開一輪）
+// 回傳 true＝已在原畫面重繪；false＝不在學習畫面（或這一輪不在紀錄裡），交給 route()
+function labRefresh(){
+  if(screen!=="lab"||!lab||!run()) return false;
+  if(lab.sync) lab.sync();
+  drawPredict(); drawTasks(); drawNav();
+  return true;
 }
 function feedback(p,info){
   var c=p.c, ok=p.ok, shaky=ok&&(p.m.unsure||p.m.hint), box=$("#ansBox");
@@ -1019,7 +1027,9 @@ function check(i){
   if(!lab) return;
   var rr=run();
   if(!rr){stopAnim();renderHome();return;}   // 記憶體裡已沒有這次例題（切回頁面時已讀到被清掉的存檔）
-  if(rr.phase==="predict"||rr.tasksDone.indexOf(i)>=0) return;
+  if(rr.phase==="predict") return;
+  // 這一步是之前補存進去的（切回分頁／再存一次），也要重繪任務與完成鈕，不然完成鈕一直停用（同社會站 e554ab6，#2632）
+  if(rr.tasksDone.indexOf(i)>=0){drawTasks();drawNav();if(rr.tasksDone.length>=rr.tasks)drawPredict();return;}
   var r=act({type:"labTask",runId:lab.runId,task:i});
   if(labGone(r)) return;
   if(r.ok){drawTasks();drawNav();if(run().tasksDone.length>=run().tasks)drawPredict();}
@@ -1126,7 +1136,7 @@ document.addEventListener("visibilitychange",function(){
   var changed=V().today!==shownDay; act({type:"tick"});
   if(changed){ if(screen==="practice") route(); else renderHome(); renderSide(); }
   else if(screen==="home") renderHome();
-  else renderSide();
+  else { if(screen==="lab") labRefresh(); renderSide(); }   // 切回分頁時補存了這一輪的一步：任務與完成鈕照存檔重繪（#2632）
 });
 // 補題做好後的連結 #c/<觀念id>（交辦 #1618；取題腳本 --done 組這個網址）：直接打開那個觀念；沒有這個觀念或還沒開放就留在首頁
 function openFromHash(e){
