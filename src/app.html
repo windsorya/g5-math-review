@@ -814,6 +814,7 @@ function retrySave(){
 // 回傳 true＝已在原畫面重繪；false＝不在學習畫面（或這一輪不在紀錄裡），交給 route()
 function labRefresh(){
   if(screen!=="lab"||!lab||!run()) return false;
+  if(run().phase==="complete"){labFinish();return true;}   // 補存進去的是完成：照完成鈕成功時的去向
   if(lab.sync) lab.sync();
   drawPredict(); drawTasks(); drawNav();
   return true;
@@ -1024,30 +1025,38 @@ function drawTasks(){
   $("#labTask").innerHTML='<strong>任務</strong>'+lab.tasks.map(function(t,i){var d=rr.tasksDone.indexOf(i)>=0;return '<div class="ck'+(d?' got':'')+'">'+checkIcon(d)+'<span>'+esc(t)+'</span></div>';}).join("");
 }
 function check(i){
-  if(!lab) return;
+  if(!lab) return false;
   var rr=run();
-  if(!rr){stopAnim();renderHome();return;}   // 記憶體裡已沒有這次例題（切回頁面時已讀到被清掉的存檔）
-  if(rr.phase==="predict") return;
+  if(!rr){stopAnim();renderHome();return false;}   // 記憶體裡已沒有這次例題（切回頁面時已讀到被清掉的存檔）
+  if(rr.phase==="predict") return false;
   // 這一步是之前補存進去的（切回分頁／再存一次），也要重繪任務與完成鈕，不然完成鈕一直停用（同社會站 e554ab6，#2632）
-  if(rr.tasksDone.indexOf(i)>=0){drawTasks();drawNav();if(rr.tasksDone.length>=rr.tasks)drawPredict();return;}
+  if(rr.tasksDone.indexOf(i)>=0){drawTasks();drawNav();if(rr.tasksDone.length>=rr.tasks)drawPredict();return true;}
   var r=act({type:"labTask",runId:lab.runId,task:i});
-  if(labGone(r)) return;
+  if(labGone(r)) return false;
   if(r.ok){drawTasks();drawNav();if(run().tasksDone.length>=run().tasks)drawPredict();}
+  return !!(r.ok||r.dup);
 }
 function drawNav(){
   var rr=run(), all=rr.prediction!==null&&rr.tasksDone.length>=rr.tasks, nav=$("#labNav");
   if(lab.ctx.from==="wrong"){
     nav.innerHTML='<button class="btn" type="button" id="labDone"'+(all?'':' disabled')+'>'+(all?'我看懂了，換一題確認':(rr.prediction===null?'先猜猜看，再完成任務':'完成任務後就能換一題確認'))+'</button><button class="btn ghost sm" type="button" id="labSkip">先回到練習</button>';
-    on("#labDone",function(){stopAnim();var r=act({type:"labComplete",runId:lab.runId});if(labGone(r))return;if(!r.ok&&!r.dup)return;lab=null;screen="practice";route();});
+    on("#labDone",function(){stopAnim();var r=act({type:"labComplete",runId:lab.runId});if(labGone(r))return;if(!r.ok&&!r.dup)return;labFinish();});
     on("#labSkip",function(){stopAnim();lab=null;screen="practice";route();});
   }else{
     nav.innerHTML='<button class="btn" type="button" id="labDone"'+(all?'':' disabled')+'>'+(all?'完成了':'每一步都看過後按這裡')+'</button><button class="btn ghost sm" type="button" id="labHome">回首頁</button>';
-    on("#labDone",function(){stopAnim();var r=act({type:"labComplete",runId:lab.runId});if(labGone(r))return;if(!r.ok&&!r.dup)return;lab=null;
-      $("#main").innerHTML='<div class="done"><b class="t">算完了</b><p class="muted" style="margin:0">跟著算完一題，再回去練卡片或考考爸媽。</p><div class="row" style="justify-content:center"><button class="btn ghost" type="button" id="back3">回首頁</button></div></div>';on("#back3",renderHome);renderSide();});
+    on("#labDone",function(){stopAnim();var r=act({type:"labComplete",runId:lab.runId});if(labGone(r))return;if(!r.ok&&!r.dup)return;labFinish();});
     on("#labHome",function(){stopAnim();lab=null;renderHome();});
   }
 }
 
+// 這一輪已完成（按完成鈕存好，或完成鈕那一下沒存到、之後補存進去）：答錯補救進來的回練習換一題確認，其他到完成畫面
+// （#2632：補存的是 labComplete 時，labRefresh 原本留在已完成的頁面、要再按一次完成；更早的版本 route() 則甩回首頁）
+function labFinish(){
+  stopAnim();
+  if(lab.ctx.from==="wrong"){lab=null;screen="practice";route();return;}
+  lab=null;
+  $("#main").innerHTML='<div class="done"><b class="t">算完了</b><p class="muted" style="margin:0">跟著算完一題，再回去練卡片或考考爸媽。</p><div class="row" style="justify-content:center"><button class="btn ghost" type="button" id="back3">回首頁</button></div></div>';on("#back3",renderHome);renderSide();
+}
 var LABS={};
 /* 數學「跟著算一題」：先猜（上面），再一步一步按「下一步」看解說的每一步；每一步都看過才算完成 */
 LABS.math=function(box){
@@ -1057,7 +1066,11 @@ LABS.math=function(box){
     $("#mSteps").innerHTML=ex.lines.slice(0,shown).map(function(t,i){return '<li class="step" style="grid-template-columns:1fr"><div class="say"><b class="n">'+(i+1)+'</b><p>'+esc(t)+'</p></div></li>';}).join("");
     $("#mNext").hidden=shown>=ex.lines.length;
   }
-  on("#mNext",function(){if(shown<ex.lines.length){check(shown);if(!lab)return;shown++;draw();}});   // check 回首頁後 lab＝null，這個畫面已不在
+  // 存檔成功（ok 或 dup）才前進；沒存到就停在這一步，上方出現「再存一次」，再按「下一步」也會重試同一步（同社會站；#2632 Codex 審 232875bd P2：
+  // 舊版不論存成功與否都前進，連續兩步沒存到時補存只救回一步、另一步已顯示卻沒存、按鈕也收起，完成鈕永遠停用）
+  on("#mNext",function(){if(shown<ex.lines.length&&check(shown)){shown++;draw();}});
+  // 補存成功後：已存進去的都顯示出來（畫面步數＝存到的步數），接著按下一步
+  lab.sync=function(){var rr=run();while(shown<ex.lines.length&&rr.tasksDone.indexOf(shown)>=0)shown++;draw();};
   draw();
 };
 

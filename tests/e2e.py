@@ -639,6 +639,72 @@ def flow_lab_retry_resume(browser):
     ctx.close()
 
 
+def flow_lab_double_fail_resume(browser):
+    """Codex 審國語站 232875bd P2（#2632，數學同碼）：第一步存好→寫入壞掉→連按兩次「下一步」（兩次都沒存到）→恢復→補存。
+    舊版「下一步」不論存成功與否都前進：第三步已顯示、下一步收起，補存只救回第二步，第三步沒存也沒按鈕能重來，完成鈕永遠停用。
+    應該：沒存到的那一步不往前顯示；補存後畫面停在存到的地方，接著按「下一步」做到完。兩種補存路（再存一次、切回分頁）各跑一次。"""
+    for how in ("再存一次", "切回分頁"):
+        ctx, pg, errors = open_page(browser, {"viewport": {"width": 390, "height": 844}})
+        n = enter_lab_wrong(pg)
+        pg.locator("#mNext").click()
+        pg.evaluate(BREAK_SET); pg.locator("#mNext").click(); pg.locator("#mNext").click()
+        failed = {"畫面步數": pg.locator("#mSteps li").count(), "下一步": pg.locator("#mNext").is_visible()}
+        pg.evaluate(FIX_SET)
+        if how == "再存一次":
+            pg.locator("#retrySave").first.click()
+        else:
+            pg.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))")
+        mid = pg.evaluate(LAST_RUN)
+        shown = pg.locator("#mSteps li").count()
+        check(f"跟著算一題連續兩步沒存到→恢復→{how}：畫面停在存到的那一步（{shown} 步＝存到 {len(mid['tasksDone']) if mid else '?'} 步）、下一步還在、提示列消失",
+              n >= 3 and failed == {"畫面步數": 1, "下一步": True} and mid and mid["tasksDone"] == [0, 1] and shown == 2
+              and pg.locator("#mNext").is_visible() and pg.locator("#retrySave").count() == 0,
+              {"n": n, "失敗時": failed, "run": mid, "畫面步數": shown, "再存一次": pg.locator("#retrySave").count()})
+        k = 0
+        while pg.locator("#mNext").count() and pg.locator("#mNext").is_visible() and k < 20:
+            pg.locator("#mNext").click(); k += 1
+        end = pg.evaluate(LAST_RUN)
+        check(f"跟著算一題連續兩步沒存到→{how}後接著做到完：每一步都記到、完成鈕可按、沒有 JS 錯誤",
+              end and mid and end["id"] == mid["id"] and end["tasksDone"] == list(range(n)) and pg.locator("#labDone").is_enabled() and not errors,
+              {"end": end, "完成鈕": pg.locator("#labDone").count() and pg.locator("#labDone").is_enabled(), "errors": errors})
+        ctx.close()
+
+
+def flow_lab_done_resume(browser):
+    """#2632 第 2 輪（Codex 審自然站 aa365726 P2，四站同型）：每一步都看完→寫入壞掉→按完成鈕（沒存到）→恢復→補存。
+    第 1 輪 labRefresh 把她留在已完成的頁面、要再按一次完成；更早的版本 route() 甩回首頁。應該：照完成鈕成功時的去向
+    （答錯補救進來＝回練習換一題確認；觀念頁進來＝完成畫面）。"""
+    def open_menu(pg):
+        pg.locator("#concepts .ccard").first.click(); pg.wait_for_selector("#cLab")
+        pg.locator("#cLab").click(); pg.wait_for_selector("#labPredict button[data-g]")
+        pg.locator("#labPredict button[data-g]").first.click(); pg.wait_for_selector("#mNext")
+    phase = """() => { const s = JSON.parse(localStorage.getItem('g5math.v2') || 'null'); const ids = Object.keys((s && s.labRuns) || {});
+      return ids.length ? s.labRuns[ids[ids.length - 1]].phase : null; }"""
+    for ctxname, opener, how in (("答錯補救進來", enter_lab_wrong, "再存一次"), ("答錯補救進來", enter_lab_wrong, "切回分頁"), ("觀念頁進來", open_menu, "再存一次")):
+        ctx, pg, errors = open_page(browser, {"viewport": {"width": 390, "height": 844}})
+        opener(pg)
+        k = 0
+        while pg.locator("#mNext").is_visible() and k < 20:
+            pg.locator("#mNext").click(); k += 1
+        pg.evaluate(BREAK_SET); pg.locator("#labDone").click()
+        failed = {"還在學習畫面": pg.locator("#labNav").count() == 1, "再存一次": pg.locator("#retrySave").count() >= 1}
+        pg.evaluate(FIX_SET)
+        if how == "再存一次":
+            pg.locator("#retrySave").first.click()
+        else:
+            pg.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))")
+        ph = pg.evaluate(phase)
+        if ctxname == "答錯補救進來":
+            dest = pg.locator("#main .q").count() == 1
+        else:
+            dest = pg.locator("#main .done").count() == 1 and "算完了" in pg.inner_text("#main")
+        check(f"跟著算一題（{ctxname}）完成鈕那一下沒存到→恢復→{how}：存成完成、離開學習頁到該去的地方、提示列消失、沒有 JS 錯誤",
+              failed == {"還在學習畫面": True, "再存一次": True} and ph == "complete" and dest and pg.locator("#labNav").count() == 0
+              and pg.locator("#retrySave").count() == 0 and not errors,
+              {"失敗時": failed, "phase": ph, "到該去的地方": dest, "main": pg.inner_text("#main")[:80], "errors": errors})
+        ctx.close()
+
+
 def flow_review(browser):
     ctx, pg, errors = open_page(browser)
     check("小考複習按鈕寫「第 4 單元 擴分、約分和通分」", "第 4 單元 擴分、約分和通分" in pg.locator("#main .review").inner_text(), pg.locator("#main .review").inner_text()[:200])
@@ -880,6 +946,8 @@ def main():
         flow_lab_after_external_clear(cr)
         flow_lab_last_resume(cr)
         flow_lab_retry_resume(cr)
+        flow_lab_double_fail_resume(cr)
+        flow_lab_done_resume(cr)
         flow_a17(cr)
         flow_upload(cr, "數學", "g5-math-review", "G5MathBank")
         cr.close()
