@@ -319,6 +319,8 @@ textarea{width:100%;min-height:120px;font-size:16px;border:1px solid var(--line)
 <!--@INLINE src/mathvideos.js-->
 <!--@INLINE src/map.js-->
 <!--@INLINE src/core.js-->
+<!--@INLINE src/bankdef.js-->
+<!--@INLINE src/weakcount.js-->
 <script>
 (function(){
 "use strict";
@@ -330,15 +332,11 @@ var CONCEPTS = {};
 Object.keys(MB.CONCEPTS).forEach(function(k){var c=MB.CONCEPTS[k];CONCEPTS[k]={unit:c.unit,short:c.short,title:c.title,lab:"math",tone:c.tone,exit:c.exit,exitAns:c.exitAns};});
 var CIDS = Object.keys(CONCEPTS);
 var SAMPLE = "自編題・程式算答案";
-var FIGS = {};
-var BASE_CARDS = MB.ALL_GENERATED || MB.ALL_CARDS || MB.CARDS;   // 2026-10-18：完整目錄（裁掉的題仍查得到，她練過的照常複習；設計方案③）
-var ALL_CARDS = BASE_CARDS;
-var ACTIVE = {}; MB.CARDS.forEach(function(c){ACTIVE[c.id]=1;});   // 能排成新卡的題
+// 題庫組裝（完整目錄、能排新卡的、考不到的 kind:"out"）在 src/bankdef.js：weak-export.js（錯題站讀待加強題數）用同一份（#4027）
+var BANK = window.G5MathBankDef.build(MB, window.G5_RETIRED);
+var FIGS = BANK.figs, ALL_CARDS = BANK.cards, ACTIVE = BANK.active, OUT = BANK.out;
 var MERGED = {}, ANQIN_ALSO = {};
-// 考不到的題（範圍稽核 kind:"out"；#2997 拍板、#3010）：不排新卡、也不排到期複習、不進任何回合；核心讀 BANK.out。挑戰題（challenge）不在此列
-var OUT = {}; (function(R){Object.keys(R).forEach(function(id){if(R[id]&&R[id].kind==="out")OUT[id]=1;});})((typeof MB!=="undefined"&&MB.RETIRED)||window.G5_RETIRED||{});
-var BANK = {cards:ALL_CARDS, active:ACTIVE, out:OUT, concepts:{}, figs:FIGS};
-CIDS.forEach(function(k){BANK.concepts[k]={unit:CONCEPTS[k].unit};});
+var W = window.G5MathWeak;   // 單元題集與「練待加強的」題數：與 weak-export.js 共用（src/weakcount.js）
 
 var ERRS = {concept:"還不懂這個觀念", reading:"看錯題目", slip:"知道但選錯了"};
 var STAGE = ["種子","發芽了","長葉了","開花了","結果了"];
@@ -557,7 +555,7 @@ function renderHome(){
   renderSide();
 }
 // 小考複習：把整個單元（或一個觀念）排成一輪；作答照規則記分、隔天照樣複習，不改今天的計畫
-function unitCards(unit){return C.poolCards(S(),BANK,V().today).filter(function(c){return CONCEPTS[c.concept].unit===unit&&conceptOn(c.concept);}).map(function(c){return c.id;});}
+function unitCards(unit){return W.unitIds(C,BANK,S(),V().today,unit);}
 function setCards(unit){return C.poolCards(S(),BANK,V().today).filter(function(c){return (c.set==="anqin"||ANQIN_ALSO[c.id])&&CONCEPTS[c.concept].unit===unit&&conceptOn(c.concept);}).map(function(c){return c.id;});}
 // 2026-10-11 律師：「每次複習都要從頭來一遍嗎？」「當天時間夠，想要全部做完，可以嗎？」
 // ⇒ 一段 20 題，做完可以馬上再練一段；也可以一次做完。

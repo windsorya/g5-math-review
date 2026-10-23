@@ -35,11 +35,49 @@ def inline(body: str) -> str:
     return out
 
 
+# 錯題站（g5-wrong-review）讀「數學 app 待加強題數」的介面檔（交辦 #4027；權威規格：g5-wrong-review/docs/app-weak-entry-design-20261019.md 第 2 節）。
+# 內容就是 app 用的那幾份 src 原檔一字不改接起來：題庫、核心（decode、poolCards、reviewPick、weakCard）、BANK 組裝、單元題集與計數，
+# 不另寫第二份判定。全部包在函式裡、把 window／module 遮成區域變數：原檔的 root.X = … 只寫進區域物件，不新增也不改任何全域；
+# 不讀不寫 localStorage、不連網。classic script，執行期間同步呼叫 G5WeakExportRegister 一次。
+WEAK_SOURCES = ["src/mathbank.js", "src/core.js", "src/bankdef.js", "src/weakcount.js"]
+WEAK_HEAD = """// 由 build.py 產生，請勿手改（改 src/ 後重跑 python3 build.py）。交辦 #4027：錯題站讀數學站「練待加強的」題數。
+// 介面：g5-wrong-review/docs/app-weak-entry-design-20261019.md 第 2 節。summarize 唯讀：不寫 localStorage、不連網、不新增全域。
+(function () {
+  if (typeof window.G5WeakExportRegister !== "function") return;   // 不是被錯題站載入（例如直接開這個檔）就什麼都不做
+  var lib = (function () {
+    var window = {}, module, exports, define;   // 遮住全域：下面原檔的 root.G5Core＝… 只寫進這個區域物件
+"""
+WEAK_TAIL = """
+    return window;
+  })();
+  var C = lib.G5Core, MB = lib.G5MathBank, W = lib.G5MathWeak;
+  var BANK = lib.G5MathBankDef.build(MB);   // 同 app.html；外部停出名單 G5_RETIRED 數學站沒有任何檔定義（錯題站頁面的全域不採）
+  window.G5WeakExportRegister({
+    api: 1,
+    key: C.LS_KEY,
+    links: { weak: null, challenge: null },   // 數學站還沒有 #go=weak／#go=challenge 深連結
+    summarize: function (raw, nowMs) { return W.summarize(C, MB, BANK, raw, nowMs); }
+  });
+})();
+"""
+
+
+def weak_export() -> str:
+    parts = []
+    for rel in WEAK_SOURCES:
+        js = (ROOT / rel).read_text(encoding="utf-8")
+        parts.append(f"// ---- {rel} ----\n" + js.rstrip("\n") + "\n")
+    return WEAK_HEAD + "\n".join(parts) + WEAK_TAIL
+
+
 def main() -> None:
     app_src = (ROOT / "src" / "app.html").read_text(encoding="utf-8")
     body = inline(app_src)
     (ROOT / "index.html").write_text(HEAD + body + "</body></html>", encoding="utf-8")
     print(f"built index.html ({len(body)} chars)")
+    wx = weak_export()
+    (ROOT / "weak-export.js").write_text(wx, encoding="utf-8")
+    print(f"built weak-export.js ({len(wx)} chars)")
 
 
 if __name__ == "__main__":
