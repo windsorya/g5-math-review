@@ -629,7 +629,8 @@
     if (!cards.length) return 0;
     var seen = cards.filter(function (c) { return cardState(s, c.id).seen > 0; }).length;
     var e = s.exits[cid], pass = !!e && e.status === "pass";
-    if (pass && cards.every(function (c) { return retired(cardState(s, c.id)); })) return 4;
+    // 考不到（kind:out）的題不會再出、永遠學不會，不擋「結果了」；仍在母體裡，做過幾題不倒退（同社會站 dc4c343，#3924）
+    if (pass && cards.every(function (c) { return isOut(bank, c.id) || retired(cardState(s, c.id)); })) return 4;
     if (pass) return 3;
     if (seen === cards.length) return 2;
     return seen ? 1 : 0;
